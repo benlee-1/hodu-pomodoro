@@ -61,30 +61,50 @@ struct TimerPanel: View {
                 }
             }
 
-            // Timer ring
-            ZStack {
-                Circle()
-                    .stroke(HoduPalette.orange.opacity(0.18), lineWidth: 10)
-                Circle()
-                    .trim(from: 0, to: max(0.001, state.progress))
-                    .stroke(
-                        HoduPalette.orange,
-                        style: StrokeStyle(lineWidth: 10, lineCap: .round)
-                    )
-                    .rotationEffect(.degrees(-90))
-                    .animation(.linear(duration: 0.2), value: state.progress)
+            // Timer ring — sizes itself to the available space so the
+            // monospaced countdown never clips on small windows.
+            GeometryReader { ringGeo in
+                let diameter = min(ringGeo.size.width, ringGeo.size.height)
+                let strokeWidth = max(4, diameter * 0.045)
+                let timeFontSize = diameter * 0.26
+                let captionFontSize = max(9, diameter * 0.058)
 
-                VStack(spacing: 4) {
-                    Text(state.formattedTime)
-                        .font(.system(size: 52, weight: .heavy, design: .monospaced))
-                        .foregroundStyle(HoduPalette.outline)
-                    Text("\(state.completedWorkSessions) 🍊 today")
-                        .font(.system(size: 11, weight: .medium, design: .rounded))
-                        .foregroundStyle(HoduPalette.outline.opacity(0.75))
+                ZStack {
+                    Circle()
+                        .stroke(HoduPalette.orange.opacity(0.18),
+                                lineWidth: strokeWidth)
+                    Circle()
+                        .trim(from: 0, to: max(0.001, state.progress))
+                        .stroke(
+                            HoduPalette.orange,
+                            style: StrokeStyle(lineWidth: strokeWidth, lineCap: .round)
+                        )
+                        .rotationEffect(.degrees(-90))
+                        .animation(.linear(duration: 0.2), value: state.progress)
+
+                    VStack(spacing: diameter * 0.02) {
+                        Text(state.formattedTime)
+                            .font(.system(size: timeFontSize,
+                                          weight: .heavy,
+                                          design: .monospaced))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
+                            .foregroundStyle(HoduPalette.outline)
+                        Text("\(state.completedWorkSessions) 🍊 today")
+                            .font(.system(size: captionFontSize,
+                                          weight: .medium,
+                                          design: .rounded))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
+                            .foregroundStyle(HoduPalette.outline.opacity(0.75))
+                    }
+                    .padding(.horizontal, diameter * 0.12)
                 }
+                .frame(width: diameter, height: diameter)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .aspectRatio(1, contentMode: .fit)
-            .frame(maxHeight: 220)
+            .frame(maxHeight: 260)
 
             // Controls
             HStack(spacing: 10) {
