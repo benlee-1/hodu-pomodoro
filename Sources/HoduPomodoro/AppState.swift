@@ -13,6 +13,18 @@ final class AppState: ObservableObject {
     @Published var tasks: [TodoItem] = []
     @Published var activeTaskId: UUID? = nil
     @Published var newTaskTitle: String = ""
+    @Published var completedHistory: [TodoItem] = []  // capped at 10, newest first
+
+    // Cat interaction (tamagotchi-ish)
+    @Published var pets: Int = 0
+    @Published var happiness: Double = 0.5  // 0...1
+    @Published var isPurring: Bool = false
+    @Published var floatingHearts: [HeartPop] = []
+    @Published var blinkTick: Int = 0
+
+    private var purrResetTask: Task<Void, Never>?
+    private var decayTimer: Timer?
+    private var blinkTimer: Timer?
 
     // Settings
     @Published var settings: Settings {
@@ -27,6 +39,9 @@ final class AppState: ObservableObject {
     private var timer: Timer?
     private let tasksURL: URL
     private let settingsURL: URL
+    private let historyURL: URL
+    private var rolloverTimer: Timer?
+    private static let historyLimit = 10
 
     init() {
         let fm = FileManager.default
@@ -38,11 +53,61 @@ final class AppState: ObservableObject {
         try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
         self.tasksURL = dir.appendingPathComponent("tasks.json")
         self.settingsURL = dir.appendingPathComponent("settings.json")
+        self.historyURL = dir.appendingPathComponent("history.json")
 
         let loaded = Self.loadSettings(from: settingsURL)
         self.settings = loaded
         self.remainingSeconds = loaded.seconds(for: .work)
         self.tasks = Self.loadTasks(from: tasksURL)
+        self.completedHistory = Self.loadHistory(from: historyURL)
+        startAmbientTimers()
+        rolloverOldCompletedTasks()
+        scheduleMidnightRollover()
+    }
+
+    private func startAmbientTimers() {
+        blinkTimer = Timer.scheduledTimer(withTimeInterval: 3.5, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.blinkTick &+= 1 }
+        }
+        decayTimer = Timer.scheduledTimer(withTimeInterval: 20.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.happiness = max(0, self.happiness - 0.02)
+            }
+        }
+    }
+
+    // MARK: - Cat interaction
+
+    func petCat(at point: CGPoint? = nil) {
+        pets += 1
+        happiness = min(1.0, happiness + 0.08)
+        isPurring = true
+        let heart = HeartPop(
+            id: UUID(),
+            x: point?.x ?? CGFloat.random(in: 20...60),
+            y: point?.y ?? CGFloat.random(in: 0...24)
+        )
+        floatingHearts.append(heart)
+        let heartId = heart.id
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 900_000_000)
+            floatingHearts.removeAll { $0.id == heartId }
+        }
+        purrResetTask?.cancel()
+        purrResetTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            if !Task.isCancelled { isPurring = false }
+        }
+    }
+
+    var catMood: String {
+        switch happiness {
+        case 0.75...: return "😽"
+        case 0.4..<0.75: return "😺"
+        case 0.15..<0.4: return "🙂"
+        default: return "😿"
+        }
     }
 
     // MARK: - Timer
@@ -128,8 +193,65 @@ final class AppState: ObservableObject {
 
     func toggleTask(_ task: TodoItem) {
         guard let idx = tasks.firstIndex(where: { $0.id == task.id }) else { return }
-        tasks[idx].isCompleted.toggle()
+        let nowCompleted = !tasks[idx].isCompleted
+        tasks[idx].isCompleted = nowCompleted
+        tasks[idx].completedAt = nowCompleted ? Date() : nil
+        sortTasks()
         saveTasks()
+    }
+
+    func renameTask(_ task: TodoItem, to newTitle: String) {
+        let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let idx = tasks.firstIndex(where: { $0.id == task.id }) else { return }
+        tasks[idx].title = trimmed
+        saveTasks()
+    }
+
+    private func sortTasks() {
+        tasks.sort { a, b in
+            if a.isCompleted != b.isCompleted { return !a.isCompleted }
+            return a.createdAt < b.createdAt
+        }
+    }
+
+    // MARK: - Rollover / history
+
+    private func rolloverOldCompletedTasks() {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        var archived: [TodoItem] = []
+        tasks.removeAll { task in
+            guard task.isCompleted, let done = task.completedAt else { return false }
+            if cal.startOfDay(for: done) < today {
+                archived.append(task)
+                return true
+            }
+            return false
+        }
+        guard !archived.isEmpty else { return }
+        // Newest first; prepend to history and cap at 10.
+        archived.sort { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
+        completedHistory = Array((archived + completedHistory).prefix(Self.historyLimit))
+        saveTasks()
+        saveHistory()
+    }
+
+    private func scheduleMidnightRollover() {
+        rolloverTimer?.invalidate()
+        let cal = Calendar.current
+        guard let nextMidnight = cal.nextDate(
+            after: Date(),
+            matching: DateComponents(hour: 0, minute: 0, second: 5),
+            matchingPolicy: .nextTime
+        ) else { return }
+        let interval = nextMidnight.timeIntervalSinceNow
+        rolloverTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                self?.rolloverOldCompletedTasks()
+                self?.scheduleMidnightRollover()
+            }
+        }
     }
 
     func deleteTask(_ task: TodoItem) {
@@ -150,6 +272,20 @@ final class AppState: ObservableObject {
         }
     }
 
+    private func saveHistory() {
+        if let data = try? JSONEncoder().encode(completedHistory) {
+            try? data.write(to: historyURL, options: .atomic)
+        }
+    }
+
+    private static func loadHistory(from url: URL) -> [TodoItem] {
+        guard let data = try? Data(contentsOf: url),
+              let decoded = try? JSONDecoder().decode([TodoItem].self, from: data) else {
+            return []
+        }
+        return Array(decoded.prefix(historyLimit))
+    }
+
     private func saveSettings() {
         if let data = try? JSONEncoder().encode(settings) {
             try? data.write(to: settingsURL, options: .atomic)
@@ -161,7 +297,10 @@ final class AppState: ObservableObject {
               let decoded = try? JSONDecoder().decode([TodoItem].self, from: data) else {
             return []
         }
-        return decoded
+        return decoded.sorted { a, b in
+            if a.isCompleted != b.isCompleted { return !a.isCompleted }
+            return a.createdAt < b.createdAt
+        }
     }
 
     private static func loadSettings(from url: URL) -> Settings {

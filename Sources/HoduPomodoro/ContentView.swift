@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct ContentView: View {
     @EnvironmentObject var state: AppState
@@ -36,10 +37,11 @@ struct ContentView: View {
 
 struct TimerPanel: View {
     @EnvironmentObject var state: AppState
+    @State private var showingSettings: Bool = false
 
     var body: some View {
         VStack(spacing: 14) {
-            // Mode picker
+            // Mode picker + settings
             HStack(spacing: 8) {
                 ForEach(TimerMode.allCases) { mode in
                     Button {
@@ -59,6 +61,24 @@ struct TimerPanel: View {
                     }
                     .buttonStyle(.plain)
                 }
+
+                Button(action: { showingSettings.toggle() }) {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(HoduPalette.outline)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.white.opacity(0.35))
+                        )
+                }
+                .buttonStyle(.plain)
+                .popover(isPresented: $showingSettings, arrowEdge: .bottom) {
+                    DurationSettings()
+                        .environmentObject(state)
+                }
+                .help("Adjust timer durations")
             }
 
             // Timer ring — sizes itself to the available space so the
@@ -136,6 +156,19 @@ struct TimerPanel: View {
             }
             .padding(.horizontal, 8)
 
+            Button(action: {
+                AppDelegate.shared?.minimizeToWidget()
+            }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "pip.enter")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text("Minimize to floating widget")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                }
+                .foregroundStyle(HoduPalette.outline.opacity(0.7))
+            }
+            .buttonStyle(.plain)
+
             // Active task indicator
             if let id = state.activeTaskId,
                let task = state.tasks.first(where: { $0.id == id }) {
@@ -197,7 +230,7 @@ struct TaskListPanel: View {
                 .buttonStyle(.plain)
             }
 
-            if state.tasks.isEmpty {
+            if state.tasks.isEmpty && state.completedHistory.isEmpty {
                 VStack(spacing: 6) {
                     Text("☁️")
                         .font(.system(size: 32))
@@ -212,6 +245,10 @@ struct TaskListPanel: View {
                     VStack(spacing: 6) {
                         ForEach(state.tasks) { task in
                             TaskRow(task: task)
+                        }
+
+                        if !state.completedHistory.isEmpty {
+                            HistorySection()
                         }
                     }
                 }
@@ -235,6 +272,10 @@ struct TaskRow: View {
     @EnvironmentObject var state: AppState
     let task: TodoItem
 
+    @State private var isEditing: Bool = false
+    @State private var draft: String = ""
+    @FocusState private var editorFocused: Bool
+
     var isActive: Bool { state.activeTaskId == task.id }
 
     var body: some View {
@@ -246,22 +287,46 @@ struct TaskRow: View {
             }
             .buttonStyle(.plain)
 
-            Button(action: { state.setActive(task) }) {
-                HStack(spacing: 6) {
-                    Text(task.title)
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
-                        .foregroundStyle(HoduPalette.outline)
-                        .strikethrough(task.isCompleted, color: HoduPalette.outline.opacity(0.6))
-                        .lineLimit(1)
-                    Spacer()
-                    if task.pomodorosSpent > 0 {
-                        Text(String(repeating: "🍊", count: min(task.pomodorosSpent, 5)))
-                            .font(.system(size: 10))
+            if isEditing {
+                TextField("Task title", text: $draft)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundStyle(HoduPalette.outline)
+                    .focused($editorFocused)
+                    .onSubmit { commitEdit() }
+                    .onExitCommand { cancelEdit() }
+                    .onChange(of: editorFocused) { focused in
+                        if !focused && isEditing { commitEdit() }
                     }
+            } else {
+                Button(action: { state.setActive(task) }) {
+                    HStack(spacing: 6) {
+                        Text(task.title)
+                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                            .foregroundStyle(HoduPalette.outline)
+                            .strikethrough(task.isCompleted, color: HoduPalette.outline.opacity(0.6))
+                            .lineLimit(1)
+                        Spacer()
+                        if task.pomodorosSpent > 0 {
+                            Text(String(repeating: "🍊", count: min(task.pomodorosSpent, 5)))
+                                .font(.system(size: 10))
+                        }
+                    }
+                    .contentShape(Rectangle())
                 }
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+                .simultaneousGesture(TapGesture(count: 2).onEnded { beginEdit() })
             }
-            .buttonStyle(.plain)
+
+            if !isEditing {
+                Button(action: beginEdit) {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(HoduPalette.outline.opacity(0.5))
+                }
+                .buttonStyle(.plain)
+                .help("Edit task (or double-click title)")
+            }
 
             Button(action: { state.deleteTask(task) }) {
                 Image(systemName: "xmark")
@@ -280,5 +345,464 @@ struct TaskRow: View {
             RoundedRectangle(cornerRadius: 10)
                 .stroke(isActive ? HoduPalette.orange : Color.clear, lineWidth: 1.5)
         )
+        .opacity(task.isCompleted ? 0.7 : 1.0)
+    }
+
+    private func beginEdit() {
+        draft = task.title
+        isEditing = true
+        Task { @MainActor in editorFocused = true }
+    }
+
+    private func commitEdit() {
+        if !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            state.renameTask(task, to: draft)
+        }
+        isEditing = false
+    }
+
+    private func cancelEdit() {
+        isEditing = false
+    }
+}
+
+// MARK: - Duration settings
+
+struct DurationSettings: View {
+    @EnvironmentObject var state: AppState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Timer durations")
+                .font(.system(size: 13, weight: .heavy, design: .rounded))
+                .foregroundStyle(HoduPalette.outline)
+
+            DurationRow(
+                label: "🍊 Focus",
+                defaultMinutes: 25,
+                value: Binding(
+                    get: { state.settings.workMinutes },
+                    set: { state.settings.workMinutes = max(1, min(120, $0)) }
+                )
+            )
+            DurationRow(
+                label: "🌴 Short Break",
+                defaultMinutes: 5,
+                value: Binding(
+                    get: { state.settings.shortBreakMinutes },
+                    set: { state.settings.shortBreakMinutes = max(1, min(60, $0)) }
+                )
+            )
+            DurationRow(
+                label: "🏖️ Long Break",
+                defaultMinutes: 15,
+                value: Binding(
+                    get: { state.settings.longBreakMinutes },
+                    set: { state.settings.longBreakMinutes = max(1, min(90, $0)) }
+                )
+            )
+
+            Divider()
+
+            HStack {
+                Text("Cycles until long break")
+                    .font(.system(size: 11, design: .rounded))
+                    .foregroundStyle(HoduPalette.outline)
+                Spacer()
+                Stepper(
+                    value: Binding(
+                        get: { state.settings.cyclesUntilLongBreak },
+                        set: { state.settings.cyclesUntilLongBreak = max(2, min(10, $0)) }
+                    ),
+                    in: 2...10
+                ) {
+                    Text("\(state.settings.cyclesUntilLongBreak)")
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(HoduPalette.outline)
+                        .frame(minWidth: 20, alignment: .trailing)
+                }
+                .labelsHidden()
+            }
+
+            Button("Reset to defaults") {
+                state.settings = Settings()
+            }
+            .buttonStyle(.plain)
+            .font(.system(size: 10, weight: .semibold, design: .rounded))
+            .foregroundStyle(HoduPalette.orange)
+        }
+        .padding(14)
+        .frame(width: 260)
+    }
+}
+
+struct DurationRow: View {
+    let label: String
+    let defaultMinutes: Int
+    @Binding var value: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack {
+                Text(label)
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(HoduPalette.outline)
+                Spacer()
+                Text("\(value) min")
+                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                    .foregroundStyle(HoduPalette.outline)
+                Stepper("", value: $value, in: 1...120)
+                    .labelsHidden()
+            }
+            Text("default \(defaultMinutes) min")
+                .font(.system(size: 9, design: .rounded))
+                .foregroundStyle(HoduPalette.outline.opacity(0.5))
+        }
+    }
+}
+
+// MARK: - History section
+
+struct HistorySection: View {
+    @EnvironmentObject var state: AppState
+    @State private var expanded: Bool = false
+
+    private static let dateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MMM d"
+        return f
+    }()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Button(action: { expanded.toggle() }) {
+                HStack(spacing: 4) {
+                    Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 9, weight: .bold))
+                    Text("Recently done (\(state.completedHistory.count))")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    Spacer()
+                }
+                .foregroundStyle(HoduPalette.outline.opacity(0.6))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 6)
+
+            if expanded {
+                ForEach(state.completedHistory) { item in
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(HoduPalette.orange.opacity(0.7))
+                        Text(item.title)
+                            .font(.system(size: 11, design: .rounded))
+                            .strikethrough(color: HoduPalette.outline.opacity(0.5))
+                            .foregroundStyle(HoduPalette.outline.opacity(0.75))
+                            .lineLimit(1)
+                        Spacer()
+                        if let done = item.completedAt {
+                            Text(Self.dateFormatter.string(from: done))
+                                .font(.system(size: 9, design: .rounded))
+                                .foregroundStyle(HoduPalette.outline.opacity(0.5))
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.4)))
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Floating widget (always on top)
+
+struct FloatingWidget: View {
+    @EnvironmentObject var state: AppState
+    var onClose: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            InteractiveCat()
+                .environmentObject(state)
+                .frame(width: 80, height: 80)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 4) {
+                    Text(state.mode.emoji)
+                        .font(.system(size: 11))
+                    Text(state.mode.label)
+                        .font(.system(size: 10, weight: .medium, design: .rounded))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button(action: onClose) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Close widget")
+                }
+
+                Text(state.formattedTime)
+                    .font(.system(size: 26, weight: .heavy, design: .monospaced))
+                    .foregroundStyle(HoduPalette.outline)
+
+                HStack(spacing: 4) {
+                    Button(action: { state.isRunning ? state.pause() : state.start() }) {
+                        Image(systemName: state.isRunning ? "pause.fill" : "play.fill")
+                            .font(.system(size: 10, weight: .bold))
+                            .frame(width: 22, height: 18)
+                            .background(RoundedRectangle(cornerRadius: 5).fill(HoduPalette.orange))
+                            .foregroundStyle(.white)
+                    }
+                    .buttonStyle(.plain)
+
+                    Button(action: { state.reset() }) {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: 10, weight: .bold))
+                            .frame(width: 22, height: 18)
+                            .background(RoundedRectangle(cornerRadius: 5).fill(Color.secondary.opacity(0.2)))
+                            .foregroundStyle(HoduPalette.outline)
+                    }
+                    .buttonStyle(.plain)
+
+                    Button(action: { AppDelegate.shared?.openMainWindow() }) {
+                        Image(systemName: "pip.exit")
+                            .font(.system(size: 10, weight: .bold))
+                            .frame(width: 22, height: 18)
+                            .background(RoundedRectangle(cornerRadius: 5).fill(Color.secondary.opacity(0.2)))
+                            .foregroundStyle(HoduPalette.outline)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Open full app")
+                }
+            }
+        }
+        .padding(10)
+        .frame(width: 240, height: 120)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color(red: 1.0, green: 0.95, blue: 0.88))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(HoduPalette.orange, lineWidth: 2)
+        )
+        .shadow(color: .black.opacity(0.25), radius: 8, y: 2)
+    }
+}
+
+// MARK: - Menu bar widget
+
+struct MenuBarWidget: View {
+    @EnvironmentObject var state: AppState
+
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 6) {
+                Text(state.mode.emoji)
+                Text(state.mode.label)
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text("\(state.completedWorkSessions) 🍊")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(state.formattedTime)
+                .font(.system(size: 34, weight: .heavy, design: .monospaced))
+                .foregroundStyle(HoduPalette.outline)
+
+            // Progress bar
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(HoduPalette.orange.opacity(0.2))
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(HoduPalette.orange)
+                        .frame(width: max(0, geo.size.width * state.progress))
+                        .animation(.linear(duration: 0.2), value: state.progress)
+                }
+            }
+            .frame(height: 6)
+
+            HStack(spacing: 6) {
+                Button(action: { state.isRunning ? state.pause() : state.start() }) {
+                    Text(state.isRunning ? "Pause" : "Start")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(HoduPalette.orange))
+                        .foregroundStyle(.white)
+                }
+                .buttonStyle(.plain)
+
+                Button(action: { state.reset() }) {
+                    Text("Reset")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.15)))
+                        .foregroundStyle(HoduPalette.outline)
+                }
+                .buttonStyle(.plain)
+            }
+
+            // Mode picker
+            HStack(spacing: 4) {
+                ForEach(TimerMode.allCases) { mode in
+                    Button {
+                        state.switchMode(mode)
+                    } label: {
+                        Text(mode.emoji)
+                            .font(.system(size: 13))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 4)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(state.mode == mode
+                                          ? HoduPalette.orange.opacity(0.25)
+                                          : Color.secondary.opacity(0.08))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .help(mode.label)
+                }
+            }
+
+            Divider()
+
+            // Interactive cat
+            InteractiveCat()
+                .environmentObject(state)
+                .frame(height: 96)
+
+            HStack {
+                Text(state.catMood)
+                    .font(.system(size: 14))
+                Text("pets: \(state.pets)")
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Open App") {
+                    NSApp.activate(ignoringOtherApps: true)
+                    for window in NSApp.windows where window.canBecomeMain {
+                        window.makeKeyAndOrderFront(nil)
+                    }
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                .foregroundStyle(HoduPalette.orange)
+
+                Button("Quit") { NSApp.terminate(nil) }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(14)
+        .frame(width: 260)
+    }
+}
+
+// MARK: - Interactive cat (tamagotchi-style)
+
+struct InteractiveCat: View {
+    @EnvironmentObject var state: AppState
+    @State private var wiggle: CGFloat = 0
+    @State private var hoverPoint: CGPoint? = nil
+    @State private var blinking = false
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack {
+                // Soft pad under the cat
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(HoduPalette.orange.opacity(0.08))
+
+                // The cat
+                ZStack {
+                    PixelSpriteView(sprite: Sprites.hodu, pixelSize: 4)
+                        .scaleEffect(state.isPurring ? 1.06 : 1.0)
+                        .rotationEffect(.degrees(wiggle))
+                        .animation(.spring(response: 0.25, dampingFraction: 0.4), value: wiggle)
+                        .animation(.spring(response: 0.3, dampingFraction: 0.5), value: state.isPurring)
+
+                    // Blink overlay (covers eyes briefly)
+                    if blinking {
+                        Rectangle()
+                            .fill(HoduPalette.orange)
+                            .frame(width: 40, height: 3)
+                            .offset(y: -6)
+                    }
+
+                    // Purring Zzz / hearts indicator
+                    if state.isPurring {
+                        Text("♪")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(HoduPalette.orange)
+                            .offset(x: 28, y: -28)
+                            .transition(.opacity)
+                    }
+                }
+
+                // Floating hearts
+                ForEach(state.floatingHearts) { heart in
+                    FloatingHeart()
+                        .position(x: heart.x, y: heart.y)
+                }
+
+                // Hover sparkle follows cursor
+                if let p = hoverPoint {
+                    Text("✨")
+                        .font(.system(size: 14))
+                        .position(p)
+                        .allowsHitTesting(false)
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { location in
+                state.petCat(at: CGPoint(x: location.x, y: max(4, location.y - 16)))
+                wiggle = CGFloat.random(in: -8...8)
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 250_000_000)
+                    wiggle = 0
+                }
+            }
+            .onContinuousHover { phase in
+                switch phase {
+                case .active(let p): hoverPoint = p
+                case .ended: hoverPoint = nil
+                }
+            }
+            .onChange(of: state.blinkTick) { _ in
+                blinking = true
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 180_000_000)
+                    blinking = false
+                }
+            }
+        }
+    }
+}
+
+struct FloatingHeart: View {
+    @State private var rise: CGFloat = 0
+    @State private var opacity: Double = 1
+
+    var body: some View {
+        Text("❤️")
+            .font(.system(size: 16))
+            .offset(y: rise)
+            .opacity(opacity)
+            .onAppear {
+                withAnimation(.easeOut(duration: 0.9)) {
+                    rise = -28
+                    opacity = 0
+                }
+            }
     }
 }

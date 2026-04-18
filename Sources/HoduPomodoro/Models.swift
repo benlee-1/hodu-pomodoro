@@ -1,4 +1,11 @@
 import Foundation
+import CoreGraphics
+
+struct HeartPop: Identifiable, Equatable {
+    let id: UUID
+    var x: CGFloat
+    var y: CGFloat
+}
 
 enum TimerMode: String, Codable, CaseIterable, Identifiable {
     case work, shortBreak, longBreak
@@ -36,6 +43,7 @@ struct TodoItem: Identifiable, Codable, Equatable {
     var isCompleted: Bool
     var pomodorosSpent: Int
     var createdAt: Date
+    var completedAt: Date?
 
     init(title: String) {
         self.id = UUID()
@@ -43,6 +51,7 @@ struct TodoItem: Identifiable, Codable, Equatable {
         self.isCompleted = false
         self.pomodorosSpent = 0
         self.createdAt = Date()
+        self.completedAt = nil
     }
 }
 

@@ -2,56 +2,93 @@
 
 A cute, bit-graphic pomodoro timer for macOS starring **Hodu** — an orange cat
 with a white belly, sitting on a beach. Native SwiftUI app. Runs fully offline.
-Tasks and settings persist in `~/Library/Application Support/HoduPomodoro/`.
+Tasks, settings, and history persist in `~/Library/Application Support/HoduPomodoro/`.
 
 ![Hodu Pomodoro](./screenshot.png)
 
-## Features
-
-- 🍊 **Pomodoro timer** with Focus (25m), Short Break (5m), and Long Break (15m)
-  modes. Auto-switches between work and breaks, and into a long break every
-  four completed focus sessions.
-- ✅ **Task list** — add, tick off, delete. Click a task to set it as the
-  active focus; every completed focus session adds a 🍊 next to it.
-- 🏖️ **Pixel-art beach scene** — hand-drawn Hodu, a palm tree, sun, clouds,
-  seagulls, crab, scallop shell, and starfish. Renders through SwiftUI `Canvas`
-  so it stays crisp on any display and at any window size.
-- 🪟 **Resizable**, native `.app` bundle. No web views, no internet, no
-  dependencies beyond the macOS SDK.
-- 🔔 Plays the system "Glass" chime when a session ends.
-
-## Requirements
-
-- macOS 13 (Ventura) or newer
-- Xcode command-line tools (`swift` toolchain) to build
-
-## Build & run
+## Quick start
 
 ```bash
+git clone <this-repo> hodu-pomodoro
+cd hodu-pomodoro
 ./build.sh
 open HoduPomodoro.app
 ```
 
-This compiles in release mode and assembles `HoduPomodoro.app` in the repo
-root. Double-click it in Finder, or `open` it from the terminal.
+First run may be blocked by Gatekeeper (the app isn't code-signed). If so,
+right-click `HoduPomodoro.app` → **Open** → **Open** in the confirmation
+dialog. You only have to do this once.
 
-### Gatekeeper note
+To install it properly, drag `HoduPomodoro.app` into `/Applications`.
 
-The app isn't code-signed. On first launch macOS may refuse to open it.
-Either right-click the `.app` → **Open** → **Open** in the confirmation
-dialog, or run it once from the terminal (`open HoduPomodoro.app`).
+**Requirements:** macOS 13 (Ventura) or newer, and the Xcode command-line
+tools (`xcode-select --install`). No other dependencies.
+
+## Features
+
+- 🍊 **Pomodoro timer** — Focus, Short Break, Long Break. Auto-switches
+  between work and breaks, with a long break every N completed focus
+  sessions (configurable).
+- ⚙️ **Custom durations** — click the slider icon next to the mode pills to
+  open the settings popover. Adjust Focus / Short Break / Long Break minutes
+  and cycles-until-long-break with steppers. Defaults shown as a guide, and
+  a one-click "Reset to defaults".
+- ✅ **Task list with inline editing**
+  - Add tasks, click to set as the active focus target.
+  - **Double-click** (or click the ✎ pencil) to edit a task title inline.
+  - Checking a task off drops it to the bottom of today's list.
+  - At end of day (midnight or on next launch), completed tasks move into
+    **"Recently done"** — a collapsible history of the last 10 completed
+    tasks.
+  - Every completed focus session adds a 🍊 next to the active task.
+- 🪟 **Floating mini-widget** — press **⇧⌘M** (or click "Minimize to
+  floating widget") to collapse into a small always-on-top widget at the top
+  of the screen. The widget **auto-hides** when the main window is focused
+  and **re-appears** when it isn't, so it's only in the way when you want
+  it. Draggable. Stays visible over fullscreen apps.
+- 🐈 **Interactive cat** — Hodu is a mini-tamagotchi on the widget (and
+  inside the menu bar popover). Click him to pet; hearts float up, he
+  wiggles and purrs (♪), and his mood emoji improves: 😿 → 🙂 → 😺 → 😽.
+  Happiness slowly decays, so he wants a little attention now and then.
+  He blinks on his own every few seconds, and a ✨ follows your cursor
+  while hovering.
+- 🏖️ **Pixel-art beach scene** — hand-drawn Hodu, a palm tree, sun,
+  clouds, seagulls, crab, scallop shell, and starfish. Rendered through
+  SwiftUI `Canvas`, so it stays crisp at any window size.
+- 🔔 Plays the system "Glass" chime when a session ends.
+
+## Keyboard shortcuts
+
+| Shortcut  | Action                        |
+|-----------|-------------------------------|
+| ⇧⌘M       | Minimize to floating widget   |
+| ⌘Q        | Quit                          |
+
+Standard macOS window shortcuts (⌘W, ⌘M, etc.) work too.
+
+## Where your data lives
+
+```
+~/Library/Application Support/HoduPomodoro/
+  tasks.json       today's tasks
+  settings.json    durations + cycles
+  history.json     last 10 completed tasks
+```
+
+Delete the folder to wipe state.
 
 ## Project layout
 
 ```
 Sources/HoduPomodoro/
-  HoduApp.swift       @main entry, WindowGroup
-  ContentView.swift   layout + TimerPanel + TaskListPanel + TaskRow
-  AppState.swift      timer engine, tasks, persistence (JSON on disk)
-  Models.swift        TimerMode, TodoItem, Settings
+  HoduApp.swift       @main entry, AppDelegate (status item + floating panel)
+  ContentView.swift   TimerPanel, TaskListPanel, widget views, duration settings
+  AppState.swift      timer engine, tasks, persistence, cat interaction, rollover
+  Models.swift        TimerMode, TodoItem, Settings, HeartPop
   PixelArt.swift      sprite definitions + PixelSpriteView renderer
   BeachScene.swift    composed pixel-art background
 Resources/Info.plist  bundle metadata
+Resources/AppIcon.icns
 build.sh              swift build + .app bundle assembly
 ```
 
@@ -64,13 +101,10 @@ resize the window. To tweak Hodu, edit `Sprites.hodu` in `PixelArt.swift`.
 
 ## Why Swift + SwiftUI
 
-The user asked about Go. SwiftUI wins here for three reasons:
 - Truly native `.app` bundle, no runtime, no bundled browser.
-- Tiny executable (~400 KB) that launches instantly.
+- Tiny executable (~1 MB) that launches instantly.
 - `Canvas` + `GeometryReader` make crisp pixel-art rendering trivial,
   with zero image assets to ship.
-
-Go with Fyne or Wails works, but produces a larger, non-native bundle.
 
 ## License
 
