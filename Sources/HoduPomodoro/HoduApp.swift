@@ -57,6 +57,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             name: NSWindow.didResignKeyNotification,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(appDidResignActive(_:)),
+            name: NSApplication.didResignActiveNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(appDidBecomeActive(_:)),
+            name: NSApplication.didBecomeActiveNotification,
+            object: nil
+        )
     }
 
     @objc private func mainWindowBecameKey(_ note: Notification) {
@@ -67,6 +79,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func mainWindowResignedKey(_ note: Notification) {
         guard let window = note.object as? NSWindow, isAppMainWindow(window) else { return }
         if widgetMode || overlayPinned { floatingPanel?.orderFrontRegardless() }
+    }
+
+    // didResignKey on the main window doesn't fire when no Hodu window was ever
+    // key (e.g. driving the app from the menu-bar popover), so also watch app
+    // activation to keep a pinned overlay visible while the user is elsewhere.
+    @objc private func appDidResignActive(_ note: Notification) {
+        if widgetMode || overlayPinned { floatingPanel?.orderFrontRegardless() }
+    }
+
+    @objc private func appDidBecomeActive(_ note: Notification) {
+        if overlayPinned || widgetMode { return }
+        floatingPanel?.orderOut(nil)
     }
 
     func setOverlayPinned(_ on: Bool) {
