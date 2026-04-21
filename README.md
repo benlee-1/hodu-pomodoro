@@ -4,7 +4,8 @@ A cute, bit-graphic pomodoro timer for macOS starring **Hodu** — an orange cat
 with a white belly, sitting on a beach. Native SwiftUI app. Runs fully offline.
 Tasks, settings, and history persist in `~/Library/Application Support/HoduPomodoro/`.
 
-![Hodu Pomodoro](./screenshot.png)
+![Main window](./docs/screenshots/main-window.png)
+![Menu-bar popover with task picker](./docs/screenshots/menu-bar-popover.png)
 
 ## Quick start
 
