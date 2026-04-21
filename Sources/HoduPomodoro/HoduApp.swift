@@ -31,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     let state = AppState()
     private(set) var widgetMode: Bool = false
+    private(set) var overlayPinned: Bool = false
     private weak var mainWindow: NSWindow?
 
     override init() {
@@ -60,12 +61,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func mainWindowBecameKey(_ note: Notification) {
         guard let window = note.object as? NSWindow, isAppMainWindow(window) else { return }
-        if widgetMode { floatingPanel?.orderOut(nil) }
+        if widgetMode && !overlayPinned { floatingPanel?.orderOut(nil) }
     }
 
     @objc private func mainWindowResignedKey(_ note: Notification) {
         guard let window = note.object as? NSWindow, isAppMainWindow(window) else { return }
-        if widgetMode { floatingPanel?.orderFrontRegardless() }
+        if widgetMode || overlayPinned { floatingPanel?.orderFrontRegardless() }
+    }
+
+    func setOverlayPinned(_ on: Bool) {
+        overlayPinned = on
+        state.settings.overlayPinned = on
+        if on {
+            showFloatingWidget()
+        } else if !widgetMode {
+            hideFloatingWidget()
+        }
     }
 
     private func isAppMainWindow(_ window: NSWindow) -> Bool {
@@ -76,7 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func openMainWindow() {
         widgetMode = false
-        hideFloatingWidget()
+        if !overlayPinned { hideFloatingWidget() }
         NSApp.activate(ignoringOtherApps: true)
 
         if let window = mainWindow ?? NSApp.windows.first(where: { isAppMainWindow($0) }) {
@@ -114,6 +125,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if statusItem == nil { setupStatusItem() }
+        if state.settings.overlayPinned {
+            setOverlayPinned(true)
+        }
     }
 
     func registerMainWindow() {
@@ -134,11 +148,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.target = self
             button.action = #selector(togglePopover(_:))
             button.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
-            if let img = NSImage(systemSymbolName: "timer", accessibilityDescription: "Hodu Pomodoro") {
-                img.isTemplate = true
-                button.image = img
-                button.imagePosition = .imageLeading
-            }
             updateStatusTitle()
         }
 

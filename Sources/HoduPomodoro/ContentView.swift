@@ -156,18 +156,20 @@ struct TimerPanel: View {
             }
             .padding(.horizontal, 8)
 
-            Button(action: {
-                AppDelegate.shared?.minimizeToWidget()
-            }) {
+            Toggle(isOn: Binding(
+                get: { state.settings.overlayPinned },
+                set: { AppDelegate.shared?.setOverlayPinned($0) }
+            )) {
                 HStack(spacing: 4) {
                     Image(systemName: "pip.enter")
                         .font(.system(size: 11, weight: .semibold))
-                    Text("Minimize to floating widget")
+                    Text("Pin floating overlay")
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
                 }
                 .foregroundStyle(HoduPalette.outline.opacity(0.7))
             }
-            .buttonStyle(.plain)
+            .toggleStyle(.switch)
+            .controlSize(.mini)
 
             // Active task indicator
             if let id = state.activeTaskId,
@@ -326,6 +328,14 @@ struct TaskRow: View {
                 }
                 .buttonStyle(.plain)
                 .help("Edit task (or double-click title)")
+
+                Button(action: copyTitle) {
+                    Image(systemName: "doc.on.doc")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(HoduPalette.outline.opacity(0.5))
+                }
+                .buttonStyle(.plain)
+                .help("Copy task text")
             }
 
             Button(action: { state.deleteTask(task) }) {
@@ -346,6 +356,18 @@ struct TaskRow: View {
                 .stroke(isActive ? HoduPalette.orange : Color.clear, lineWidth: 1.5)
         )
         .opacity(task.isCompleted ? 0.7 : 1.0)
+        .contextMenu {
+            Button("Copy") { copyTitle() }
+            Button("Edit") { beginEdit() }
+            Divider()
+            Button("Delete", role: .destructive) { state.deleteTask(task) }
+        }
+    }
+
+    private func copyTitle() {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(task.title, forType: .string)
     }
 
     private func beginEdit() {
@@ -451,7 +473,7 @@ struct DurationRow: View {
                 Text("\(value) min")
                     .font(.system(size: 12, weight: .bold, design: .monospaced))
                     .foregroundStyle(HoduPalette.outline)
-                Stepper("", value: $value, in: 1...120)
+                Stepper("", value: $value, in: 5...120, step: 5)
                     .labelsHidden()
             }
             Text("default \(defaultMinutes) min")
@@ -673,6 +695,9 @@ struct MenuBarWidget: View {
                 }
             }
 
+            FocusTaskStrip()
+                .environmentObject(state)
+
             Divider()
 
             // Interactive cat
@@ -688,10 +713,7 @@ struct MenuBarWidget: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button("Open App") {
-                    NSApp.activate(ignoringOtherApps: true)
-                    for window in NSApp.windows where window.canBecomeMain {
-                        window.makeKeyAndOrderFront(nil)
-                    }
+                    AppDelegate.shared?.openMainWindow()
                 }
                 .buttonStyle(.plain)
                 .font(.system(size: 10, weight: .semibold, design: .rounded))
@@ -705,6 +727,143 @@ struct MenuBarWidget: View {
         }
         .padding(14)
         .frame(width: 260)
+    }
+}
+
+// MARK: - Focus task strip (menu-bar popover)
+
+struct FocusTaskStrip: View {
+    @EnvironmentObject var state: AppState
+    @State private var showingPicker = false
+
+    private var activeTask: TodoItem? {
+        guard let id = state.activeTaskId else { return nil }
+        return state.tasks.first(where: { $0.id == id })
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "target")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(HoduPalette.orange)
+
+            Text(activeTask?.title ?? "No task focused")
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .foregroundStyle(activeTask == nil ? .secondary : HoduPalette.outline)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let task = activeTask {
+                Button(action: { copy(task.title) }) {
+                    Image(systemName: "doc.on.doc")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Copy focused task")
+            }
+
+            Button(action: { showingPicker.toggle() }) {
+                Image(systemName: "list.bullet")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Pick focused task")
+            .popover(isPresented: $showingPicker, arrowEdge: .trailing) {
+                TaskPickerPopover { showingPicker = false }
+                    .environmentObject(state)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.08)))
+    }
+
+    private func copy(_ s: String) {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(s, forType: .string)
+    }
+}
+
+struct TaskPickerPopover: View {
+    @EnvironmentObject var state: AppState
+    let onDismiss: () -> Void
+
+    private var openTasks: [TodoItem] { state.tasks.filter { !$0.isCompleted } }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Focus on…")
+                    .font(.system(size: 11, weight: .heavy, design: .rounded))
+                    .foregroundStyle(HoduPalette.outline)
+                Spacer()
+                if state.activeTaskId != nil {
+                    Button("Clear") {
+                        state.activeTaskId = nil
+                        onDismiss()
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .foregroundStyle(HoduPalette.orange)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.top, 10)
+            .padding(.bottom, 6)
+
+            Divider()
+
+            if openTasks.isEmpty {
+                Text("No open tasks")
+                    .font(.system(size: 11, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .padding(12)
+            } else {
+                ScrollView {
+                    VStack(spacing: 2) {
+                        ForEach(openTasks) { task in
+                            Button(action: {
+                                state.activeTaskId = task.id
+                                onDismiss()
+                            }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: state.activeTaskId == task.id ? "largecircle.fill.circle" : "circle")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(state.activeTaskId == task.id ? HoduPalette.orange : .secondary)
+                                    Text(task.title)
+                                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                                        .foregroundStyle(HoduPalette.outline)
+                                        .lineLimit(1)
+                                    Spacer()
+                                    if task.pomodorosSpent > 0 {
+                                        Text(String(repeating: "🍊", count: min(task.pomodorosSpent, 5)))
+                                            .font(.system(size: 9))
+                                    }
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .contentShape(Rectangle())
+                                .background(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .fill(state.activeTaskId == task.id
+                                              ? HoduPalette.orange.opacity(0.15)
+                                              : Color.clear)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                    .padding(.horizontal, 4)
+                }
+                .frame(maxHeight: 220)
+            }
+        }
+        .frame(width: 240)
     }
 }
 
