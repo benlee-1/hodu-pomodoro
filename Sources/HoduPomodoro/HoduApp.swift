@@ -205,7 +205,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             popover.performClose(sender)
         } else {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            popover.contentViewController?.view.window?.makeKey()
+            // Pop the popover's host window onto the current Space and key it
+            // ourselves — avoids NSApp.activate, which would drag the main
+            // window (and the user) back to its home Space.
+            if let popWindow = popover.contentViewController?.view.window {
+                popWindow.collectionBehavior.insert(.canJoinAllSpaces)
+                popWindow.collectionBehavior.insert(.fullScreenAuxiliary)
+                popWindow.makeKeyAndOrderFront(nil)
+            }
         }
     }
 
@@ -228,14 +235,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             defer: false
         )
         panel.isMovableByWindowBackground = true
-        // .statusBar (not .floating) so the panel draws over other apps'
-        // fullscreen windows; .stationary keeps it in place across Spaces
-        // transitions instead of riding Mission Control animations.
-        panel.level = .statusBar
+        panel.level = .floating
         panel.hidesOnDeactivate = false
         panel.isFloatingPanel = true
         panel.becomesKeyOnlyIfNeeded = true
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = false
