@@ -228,11 +228,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             defer: false
         )
         panel.isMovableByWindowBackground = true
-        panel.level = .floating
+        // .statusBar (not .floating) so the panel draws over other apps'
+        // fullscreen windows; .stationary keeps it in place across Spaces
+        // transitions instead of riding Mission Control animations.
+        panel.level = .statusBar
         panel.hidesOnDeactivate = false
         panel.isFloatingPanel = true
         panel.becomesKeyOnlyIfNeeded = true
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = false
