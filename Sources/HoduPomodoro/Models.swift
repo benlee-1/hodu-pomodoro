@@ -60,6 +60,22 @@ struct Settings: Codable {
     var shortBreakMinutes: Int = 5
     var longBreakMinutes: Int = 15
     var cyclesUntilLongBreak: Int = 4
+    var overlayPinned: Bool = false
+
+    init() {}
+
+    private enum CodingKeys: String, CodingKey {
+        case workMinutes, shortBreakMinutes, longBreakMinutes, cyclesUntilLongBreak, overlayPinned
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.workMinutes = try c.decodeIfPresent(Int.self, forKey: .workMinutes) ?? 25
+        self.shortBreakMinutes = try c.decodeIfPresent(Int.self, forKey: .shortBreakMinutes) ?? 5
+        self.longBreakMinutes = try c.decodeIfPresent(Int.self, forKey: .longBreakMinutes) ?? 15
+        self.cyclesUntilLongBreak = try c.decodeIfPresent(Int.self, forKey: .cyclesUntilLongBreak) ?? 4
+        self.overlayPinned = try c.decodeIfPresent(Bool.self, forKey: .overlayPinned) ?? false
+    }
 
     func seconds(for mode: TimerMode) -> Int {
         switch mode {
