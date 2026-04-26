@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 // A sprite palette maps characters to Colors.
 // "." is reserved for transparent.
@@ -32,6 +33,20 @@ enum HoduPalette {
     static let shellPink  = Color(red: 1.00, green: 0.82, blue: 0.80)
     static let shellDeep  = Color(red: 0.92, green: 0.60, blue: 0.64)
     static let starYellow = Color(red: 1.00, green: 0.88, blue: 0.46)
+
+    // Adaptive text color for surfaces that follow the system appearance
+    // (menu-bar popover, its sub-popovers, the timer-settings popover).
+    // The fixed `outline` brown is unreadable on the dark vibrant material
+    // macOS uses for popovers in dark mode, so these surfaces use this
+    // color instead. Stays warm in light mode; flips to a soft cream in
+    // dark mode so it still feels on-palette.
+    static let adaptiveText = Color(nsColor: NSColor(name: "HoduAdaptiveText") { appearance in
+        let isDark = appearance.bestMatch(from: [.darkAqua, .vibrantDark, .aqua, .vibrantLight])
+            .map { $0 == .darkAqua || $0 == .vibrantDark } ?? false
+        return isDark
+            ? NSColor(red: 1.00, green: 0.94, blue: 0.86, alpha: 1.0)
+            : NSColor(red: 0.20, green: 0.13, blue: 0.10, alpha: 1.0)
+    })
 }
 
 enum Sprites {
