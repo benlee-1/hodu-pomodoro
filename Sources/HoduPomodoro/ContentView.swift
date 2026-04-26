@@ -397,7 +397,7 @@ struct DurationSettings: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Timer durations")
                 .font(.system(size: 13, weight: .heavy, design: .rounded))
-                .foregroundStyle(HoduPalette.outline)
+                .foregroundStyle(HoduPalette.adaptiveText)
 
             DurationRow(
                 label: "🍊 Focus",
@@ -429,7 +429,7 @@ struct DurationSettings: View {
             HStack {
                 Text("Cycles until long break")
                     .font(.system(size: 11, design: .rounded))
-                    .foregroundStyle(HoduPalette.outline)
+                    .foregroundStyle(HoduPalette.adaptiveText)
                 Spacer()
                 Stepper(
                     value: Binding(
@@ -440,7 +440,7 @@ struct DurationSettings: View {
                 ) {
                     Text("\(state.settings.cyclesUntilLongBreak)")
                         .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(HoduPalette.outline)
+                        .foregroundStyle(HoduPalette.adaptiveText)
                         .frame(minWidth: 20, alignment: .trailing)
                 }
                 .labelsHidden()
@@ -468,17 +468,17 @@ struct DurationRow: View {
             HStack {
                 Text(label)
                     .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    .foregroundStyle(HoduPalette.outline)
+                    .foregroundStyle(HoduPalette.adaptiveText)
                 Spacer()
                 Text("\(value) min")
                     .font(.system(size: 12, weight: .bold, design: .monospaced))
-                    .foregroundStyle(HoduPalette.outline)
+                    .foregroundStyle(HoduPalette.adaptiveText)
                 Stepper("", value: $value, in: 5...120, step: 5)
                     .labelsHidden()
             }
             Text("default \(defaultMinutes) min")
                 .font(.system(size: 9, design: .rounded))
-                .foregroundStyle(HoduPalette.outline.opacity(0.5))
+                .foregroundStyle(HoduPalette.adaptiveText.opacity(0.5))
         }
     }
 }
@@ -636,7 +636,7 @@ struct MenuBarWidget: View {
 
             Text(state.formattedTime)
                 .font(.system(size: 34, weight: .heavy, design: .monospaced))
-                .foregroundStyle(HoduPalette.outline)
+                .foregroundStyle(HoduPalette.adaptiveText)
 
             // Progress bar
             GeometryReader { geo in
@@ -668,7 +668,7 @@ struct MenuBarWidget: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
                         .background(RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.15)))
-                        .foregroundStyle(HoduPalette.outline)
+                        .foregroundStyle(HoduPalette.adaptiveText)
                 }
                 .buttonStyle(.plain)
             }
@@ -749,7 +749,7 @@ struct FocusTaskStrip: View {
 
             Text(activeTask?.title ?? "No task focused")
                 .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundStyle(activeTask == nil ? .secondary : HoduPalette.outline)
+                .foregroundStyle(activeTask == nil ? .secondary : HoduPalette.adaptiveText)
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -799,7 +799,7 @@ struct TaskPickerPopover: View {
             HStack {
                 Text("Focus on…")
                     .font(.system(size: 11, weight: .heavy, design: .rounded))
-                    .foregroundStyle(HoduPalette.outline)
+                    .foregroundStyle(HoduPalette.adaptiveText)
                 Spacer()
                 if state.activeTaskId != nil {
                     Button("Clear") {
@@ -836,7 +836,7 @@ struct TaskPickerPopover: View {
                                         .foregroundStyle(state.activeTaskId == task.id ? HoduPalette.orange : .secondary)
                                     Text(task.title)
                                         .font(.system(size: 11, weight: .medium, design: .rounded))
-                                        .foregroundStyle(HoduPalette.outline)
+                                        .foregroundStyle(HoduPalette.adaptiveText)
                                         .lineLimit(1)
                                     Spacer()
                                     if task.pomodorosSpent > 0 {
