@@ -34,6 +34,33 @@ enum HoduPalette {
     static let shellDeep  = Color(red: 0.92, green: 0.60, blue: 0.64)
     static let starYellow = Color(red: 1.00, green: 0.88, blue: 0.46)
 
+    // Selection chrome — tints scale with the number of selected tasks so the
+    // user can feel "too many" at a glance. See `SelectionLoadLevel`.
+    static let selectionCalmFill      = Color(red: 1.00, green: 0.62, blue: 0.32).opacity(0.22)
+    static let selectionCalmBorder    = Color(red: 1.00, green: 0.62, blue: 0.32)
+    static let selectionCautionFill   = Color(red: 0.95, green: 0.70, blue: 0.25).opacity(0.30)
+    static let selectionCautionBorder = Color(red: 0.91, green: 0.66, blue: 0.20)
+    static let selectionOverloadFill  = Color(red: 0.92, green: 0.36, blue: 0.32).opacity(0.32)
+    static let selectionOverloadBorder = Color(red: 0.88, green: 0.30, blue: 0.26)
+
+    static func selectionFill(for level: SelectionLoadLevel) -> Color {
+        switch level {
+        case .none: return .clear
+        case .calm: return selectionCalmFill
+        case .caution: return selectionCautionFill
+        case .overload: return selectionOverloadFill
+        }
+    }
+
+    static func selectionBorder(for level: SelectionLoadLevel) -> Color {
+        switch level {
+        case .none: return .clear
+        case .calm: return selectionCalmBorder
+        case .caution: return selectionCautionBorder
+        case .overload: return selectionOverloadBorder
+        }
+    }
+
     // Adaptive text color for surfaces that follow the system appearance
     // (menu-bar popover, its sub-popovers, the timer-settings popover).
     // The fixed `outline` brown is unreadable on the dark vibrant material

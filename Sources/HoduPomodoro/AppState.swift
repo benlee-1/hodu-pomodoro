@@ -15,6 +15,11 @@ final class AppState: ObservableObject {
     @Published var newTaskTitle: String = ""
     @Published var completedHistory: [TodoItem] = []  // capped at 10, newest first
 
+    // Multi-selection — ephemeral planning aid, not persisted. Separate from
+    // `activeTaskId`: selection is "what I'm considering doing"; focus is
+    // "what the pomodoro engine tallies against."
+    @Published var selectedTaskIds: Set<UUID> = []
+
     // Cat interaction (tamagotchi-ish)
     @Published var pets: Int = 0
     @Published var happiness: Double = 0.5  // 0...1
@@ -196,7 +201,27 @@ final class AppState: ObservableObject {
         let nowCompleted = !tasks[idx].isCompleted
         tasks[idx].isCompleted = nowCompleted
         tasks[idx].completedAt = nowCompleted ? Date() : nil
+        if nowCompleted { selectedTaskIds.remove(task.id) }
         saveTasks()
+    }
+
+    // MARK: - Multi-selection
+
+    func toggleSelection(_ task: TodoItem) {
+        guard !task.isCompleted else { return }
+        if selectedTaskIds.contains(task.id) {
+            selectedTaskIds.remove(task.id)
+        } else {
+            selectedTaskIds.insert(task.id)
+        }
+    }
+
+    func clearSelection() {
+        selectedTaskIds.removeAll()
+    }
+
+    var selectionLoadLevel: SelectionLoadLevel {
+        SelectionLoadLevel(count: selectedTaskIds.count)
     }
 
     /// Reorder a task: move the task with `id` so it lands immediately before
@@ -237,6 +262,7 @@ final class AppState: ObservableObject {
             return false
         }
         guard !archived.isEmpty else { return }
+        for t in archived { selectedTaskIds.remove(t.id) }
         // Newest first; prepend to history and cap at 10.
         archived.sort { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
         completedHistory = Array((archived + completedHistory).prefix(Self.historyLimit))
@@ -264,6 +290,7 @@ final class AppState: ObservableObject {
     func deleteTask(_ task: TodoItem) {
         tasks.removeAll { $0.id == task.id }
         if activeTaskId == task.id { activeTaskId = nil }
+        selectedTaskIds.remove(task.id)
         saveTasks()
     }
 

@@ -1,6 +1,23 @@
 import Foundation
 import CoreGraphics
 
+/// How "loaded" the multi-selection is. Drives the warning color shift —
+/// `calm` for 1-2, `caution` for 3-4, `overload` for 5+. `none` means the
+/// selection is empty (used as a neutral default; UI hides selection chrome
+/// when there's nothing selected).
+enum SelectionLoadLevel {
+    case none, calm, caution, overload
+
+    init(count: Int) {
+        switch count {
+        case 0: self = .none
+        case 1...2: self = .calm
+        case 3...4: self = .caution
+        default: self = .overload
+        }
+    }
+}
+
 struct HeartPop: Identifiable, Equatable {
     let id: UUID
     var x: CGFloat

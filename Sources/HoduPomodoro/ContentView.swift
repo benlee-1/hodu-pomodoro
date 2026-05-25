@@ -282,6 +282,10 @@ struct TaskListPanel: View {
                 }
             }
 
+            if !state.selectedTaskIds.isEmpty {
+                SelectionFooter()
+            }
+
             Spacer(minLength: 0)
         }
         .padding(16)
@@ -293,6 +297,59 @@ struct TaskListPanel: View {
                         .stroke(Color.white.opacity(0.9), lineWidth: 1.5)
                 )
         )
+        .onExitCommand { state.clearSelection() }
+    }
+}
+
+struct SelectionFooter: View {
+    @EnvironmentObject var state: AppState
+
+    private var loadCopy: String {
+        switch state.selectionLoadLevel {
+        case .none, .calm: return ""
+        case .caution: return "  ·  that's a lot"
+        case .overload: return "  ·  grabbing a lot"
+        }
+    }
+
+    var body: some View {
+        let level = state.selectionLoadLevel
+        let border = HoduPalette.selectionBorder(for: level)
+
+        HStack(spacing: 8) {
+            Circle()
+                .fill(border)
+                .frame(width: 8, height: 8)
+            Text("\(state.selectedTaskIds.count) selected\(loadCopy)")
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .foregroundStyle(border)
+            Spacer()
+            Button(action: { state.clearSelection() }) {
+                Text("Clear")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(HoduPalette.outline.opacity(0.7))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.7)))
+            }
+            .buttonStyle(.plain)
+            // Cancel-action gives Esc a real binding regardless of which
+            // subview owns first responder — `.onExitCommand` on the panel
+            // only fires when the panel chain is focused.
+            .keyboardShortcut(.cancelAction)
+            .help("Clear selection (Esc)")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(HoduPalette.selectionFill(for: level))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(border.opacity(0.5), lineWidth: 1)
+        )
+        .animation(.easeInOut(duration: 0.18), value: level)
     }
 }
 
@@ -302,12 +359,31 @@ struct TaskRow: View {
 
     @State private var isEditing: Bool = false
     @State private var draft: String = ""
+    @State private var isHovering: Bool = false
     @FocusState private var editorFocused: Bool
 
     var isActive: Bool { state.activeTaskId == task.id }
+    var isSelected: Bool { state.selectedTaskIds.contains(task.id) }
 
     var body: some View {
         HStack(spacing: 8) {
+            // Selection checkbox — hover-revealed (or always-on when already
+            // selected). Hidden for completed rows since selection is a
+            // forward-looking planning act.
+            if !task.isCompleted && (isHovering || isSelected) {
+                Button(action: { state.toggleSelection(task) }) {
+                    Image(systemName: isSelected ? "checkmark.square.fill" : "square")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(isSelected
+                                         ? HoduPalette.selectionBorder(for: state.selectionLoadLevel)
+                                         : HoduPalette.outline.opacity(0.45))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(isSelected ? "Deselect task" : "Add task to selection")
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
+                .help(isSelected ? "Remove from selection" : "Add to selection")
+            }
+
             Button(action: { state.toggleTask(task) }) {
                 Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 16, weight: .semibold))
@@ -327,7 +403,14 @@ struct TaskRow: View {
                         if !focused && isEditing { commitEdit() }
                     }
             } else {
-                Button(action: { state.setActive(task) }) {
+                Button(action: {
+                    // ⌘-click toggles multi-selection; plain click toggles focus.
+                    if NSEvent.modifierFlags.contains(.command) && !task.isCompleted {
+                        state.toggleSelection(task)
+                    } else {
+                        state.setActive(task)
+                    }
+                }) {
                     HStack(spacing: 6) {
                         Text(task.title)
                             .font(.system(size: 13, weight: .medium, design: .rounded))
@@ -374,14 +457,34 @@ struct TaskRow: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(isActive ? HoduPalette.orange.opacity(0.35) : Color.white.opacity(0.7))
+            ZStack {
+                // Base layer: white if neither active nor selected; selection
+                // tint if selected; active overlay wins visually on top.
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(isSelected
+                          ? HoduPalette.selectionFill(for: state.selectionLoadLevel)
+                          : Color.white.opacity(0.7))
+                if isActive {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(HoduPalette.orange.opacity(0.35))
+                }
+            }
         )
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .stroke(isActive ? HoduPalette.orange : Color.clear, lineWidth: 1.5)
+                .stroke(
+                    isActive
+                        ? HoduPalette.orange
+                        : (isSelected
+                           ? HoduPalette.selectionBorder(for: state.selectionLoadLevel)
+                           : Color.clear),
+                    lineWidth: 1.5
+                )
         )
         .opacity(task.isCompleted ? 0.7 : 1.0)
+        .animation(.easeInOut(duration: 0.18), value: state.selectionLoadLevel)
+        .animation(.easeInOut(duration: 0.18), value: isSelected)
+        .onHover { isHovering = $0 }
         .contextMenu {
             Button("Copy") { copyTitle() }
             Button("Edit") { beginEdit() }
