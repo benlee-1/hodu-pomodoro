@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 struct ContentView: View {
     @EnvironmentObject var state: AppState
@@ -206,6 +207,7 @@ struct TimerPanel: View {
 
 struct TaskListPanel: View {
     @EnvironmentObject var state: AppState
+    @State private var draggingTaskId: UUID? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -247,7 +249,31 @@ struct TaskListPanel: View {
                     VStack(spacing: 6) {
                         ForEach(state.tasks) { task in
                             TaskRow(task: task)
+                                .opacity(draggingTaskId == task.id ? 0.4 : 1)
+                                .onDrag {
+                                    draggingTaskId = task.id
+                                    return NSItemProvider(object: task.id.uuidString as NSString)
+                                }
+                                .onDrop(
+                                    of: [UTType.text],
+                                    delegate: TaskDropDelegate(
+                                        target: task,
+                                        state: state,
+                                        draggingTaskId: $draggingTaskId
+                                    )
+                                )
                         }
+                        // Trailing drop zone so tasks can be moved to the end.
+                        Color.clear
+                            .frame(height: 12)
+                            .onDrop(
+                                of: [UTType.text],
+                                delegate: TaskDropDelegate(
+                                    target: nil,
+                                    state: state,
+                                    draggingTaskId: $draggingTaskId
+                                )
+                            )
 
                         if !state.completedHistory.isEmpty {
                             HistorySection()
@@ -386,6 +412,32 @@ struct TaskRow: View {
     private func cancelEdit() {
         isEditing = false
     }
+}
+
+struct TaskDropDelegate: DropDelegate {
+    /// The row being hovered; `nil` means the trailing zone (move to end).
+    let target: TodoItem?
+    let state: AppState
+    @Binding var draggingTaskId: UUID?
+
+    func dropEntered(info: DropInfo) {
+        guard let dragId = draggingTaskId, dragId != target?.id else { return }
+        // Live reorder while dragging — feels much better than waiting for drop.
+        Task { @MainActor in
+            state.moveTask(id: dragId, before: target?.id)
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggingTaskId = nil
+        return true
+    }
+
+    func dropExited(info: DropInfo) {}
 }
 
 // MARK: - Duration settings

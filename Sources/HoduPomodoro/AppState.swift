@@ -196,7 +196,21 @@ final class AppState: ObservableObject {
         let nowCompleted = !tasks[idx].isCompleted
         tasks[idx].isCompleted = nowCompleted
         tasks[idx].completedAt = nowCompleted ? Date() : nil
-        sortTasks()
+        saveTasks()
+    }
+
+    /// Reorder a task: move the task with `id` so it lands immediately before
+    /// the task with `targetId`. If `targetId` is nil, move to the end.
+    /// No-ops on self-drops or unknown ids.
+    func moveTask(id: UUID, before targetId: UUID?) {
+        guard id != targetId,
+              let from = tasks.firstIndex(where: { $0.id == id }) else { return }
+        let moving = tasks.remove(at: from)
+        if let targetId, let to = tasks.firstIndex(where: { $0.id == targetId }) {
+            tasks.insert(moving, at: to)
+        } else {
+            tasks.append(moving)
+        }
         saveTasks()
     }
 
@@ -206,13 +220,6 @@ final class AppState: ObservableObject {
               let idx = tasks.firstIndex(where: { $0.id == task.id }) else { return }
         tasks[idx].title = trimmed
         saveTasks()
-    }
-
-    private func sortTasks() {
-        tasks.sort { a, b in
-            if a.isCompleted != b.isCompleted { return !a.isCompleted }
-            return a.createdAt < b.createdAt
-        }
     }
 
     // MARK: - Rollover / history
@@ -297,10 +304,7 @@ final class AppState: ObservableObject {
               let decoded = try? JSONDecoder().decode([TodoItem].self, from: data) else {
             return []
         }
-        return decoded.sorted { a, b in
-            if a.isCompleted != b.isCompleted { return !a.isCompleted }
-            return a.createdAt < b.createdAt
-        }
+        return decoded
     }
 
     private static func loadSettings(from url: URL) -> Settings {
