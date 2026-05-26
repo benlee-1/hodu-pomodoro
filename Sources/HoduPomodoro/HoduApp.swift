@@ -180,6 +180,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         state.settings.uiScale = clamped
 
         guard let window = mainWindow ?? NSApp.windows.first(where: { isAppMainWindow($0) }) else { return }
+        // In native fullscreen the window size is pinned to the display;
+        // calling setFrame here shrinks the window inside the fullscreen
+        // container and macOS fills the slack with black gutters. The
+        // ScalingRoot view's `geo.size / scale` math fills the screen
+        // correctly at any scale, so just skip the resize.
+        if window.styleMask.contains(.fullScreen) { return }
         let ratio = clamped / old
         let current = window.frame
         var newSize = NSSize(width: current.width * ratio, height: current.height * ratio)
