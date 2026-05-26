@@ -78,11 +78,18 @@ struct Settings: Codable {
     var longBreakMinutes: Int = 15
     var cyclesUntilLongBreak: Int = 4
     var overlayPinned: Bool = false
+    /// Global UI zoom factor for the main window. Clamped to
+    /// `Settings.minUIScale...Settings.maxUIScale` whenever it's written.
+    var uiScale: Double = 1.0
+
+    static let minUIScale: Double = 0.8
+    static let maxUIScale: Double = 2.0
+    static let uiScaleStep: Double = 0.1
 
     init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case workMinutes, shortBreakMinutes, longBreakMinutes, cyclesUntilLongBreak, overlayPinned
+        case workMinutes, shortBreakMinutes, longBreakMinutes, cyclesUntilLongBreak, overlayPinned, uiScale
     }
 
     init(from decoder: Decoder) throws {
@@ -92,6 +99,8 @@ struct Settings: Codable {
         self.longBreakMinutes = try c.decodeIfPresent(Int.self, forKey: .longBreakMinutes) ?? 15
         self.cyclesUntilLongBreak = try c.decodeIfPresent(Int.self, forKey: .cyclesUntilLongBreak) ?? 4
         self.overlayPinned = try c.decodeIfPresent(Bool.self, forKey: .overlayPinned) ?? false
+        let rawScale = try c.decodeIfPresent(Double.self, forKey: .uiScale) ?? 1.0
+        self.uiScale = min(max(rawScale, Settings.minUIScale), Settings.maxUIScale)
     }
 
     func seconds(for mode: TimerMode) -> Int {

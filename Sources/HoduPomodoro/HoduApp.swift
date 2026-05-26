@@ -8,7 +8,7 @@ struct HoduApp: App {
 
     var body: some Scene {
         WindowGroup("Hodu Pomodoro 🍊") {
-            ContentView()
+            ScalingRoot()
                 .environmentObject(appDelegate.state)
                 .frame(minWidth: 520, minHeight: 420)
                 .onAppear { appDelegate.registerMainWindow() }
@@ -21,6 +21,32 @@ struct HoduApp: App {
                 }
                 .keyboardShortcut("m", modifiers: [.command, .shift])
             }
+            CommandGroup(after: .toolbar) {
+                Button("Zoom In") { AppDelegate.shared?.zoomIn() }
+                    .keyboardShortcut("=", modifiers: .command)
+                Button("Zoom Out") { AppDelegate.shared?.zoomOut() }
+                    .keyboardShortcut("-", modifiers: .command)
+                Button("Actual Size") { AppDelegate.shared?.resetZoom() }
+                    .keyboardShortcut("0", modifiers: .command)
+            }
+        }
+    }
+}
+
+/// Scales the entire main-window content tree by `settings.uiScale`. Inner
+/// SwiftUI layout runs at `windowSize / scale`, then is visually scaled back
+/// up — so every font, padding, and hit target grows together without
+/// rewriting individual `.font(.system(size:))` calls.
+struct ScalingRoot: View {
+    @EnvironmentObject var state: AppState
+
+    var body: some View {
+        GeometryReader { geo in
+            let scale = state.settings.uiScale
+            ContentView()
+                .frame(width: geo.size.width / scale,
+                       height: geo.size.height / scale)
+                .scaleEffect(scale, anchor: .topLeading)
         }
     }
 }
@@ -137,6 +163,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         return true
+    }
+
+    // MARK: - UI zoom
+
+    func zoomIn() { applyScale(state.settings.uiScale + Settings.uiScaleStep) }
+    func zoomOut() { applyScale(state.settings.uiScale - Settings.uiScaleStep) }
+    func resetZoom() { applyScale(1.0) }
+
+    private func applyScale(_ requested: Double) {
+        let clamped = min(max(requested, Settings.minUIScale), Settings.maxUIScale)
+        let old = state.settings.uiScale
+        // Avoid float noise when already at a bound — also skips a no-op
+        // window resize when the user hammers the shortcut past the limit.
+        guard abs(clamped - old) > 0.0001 else { return }
+        state.settings.uiScale = clamped
+
+        guard let window = mainWindow ?? NSApp.windows.first(where: { isAppMainWindow($0) }) else { return }
+        let ratio = clamped / old
+        let current = window.frame
+        var newSize = NSSize(width: current.width * ratio, height: current.height * ratio)
+        if let screen = window.screen ?? NSScreen.main {
+            let vf = screen.visibleFrame
+            newSize.width = min(newSize.width, vf.width)
+            newSize.height = min(newSize.height, vf.height)
+        }
+        // Anchor on top-left so the window doesn't crawl down-screen when
+        // shrinking (NSWindow origin is bottom-left).
+        let newOrigin = NSPoint(
+            x: current.origin.x,
+            y: current.origin.y + (current.height - newSize.height)
+        )
+        window.setFrame(NSRect(origin: newOrigin, size: newSize), display: true, animate: false)
     }
 
     func minimizeToWidget() {
