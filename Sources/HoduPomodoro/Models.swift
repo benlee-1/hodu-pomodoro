@@ -54,6 +54,88 @@ enum TimerMode: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum TaskBucket: String, Codable, CaseIterable, Identifiable {
+    case inbox, today, upcoming, anytime, someday
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .inbox: return "Inbox"
+        case .today: return "Today"
+        case .upcoming: return "Upcoming"
+        case .anytime: return "Anytime"
+        case .someday: return "Someday"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .inbox: return "tray"
+        case .today: return "star.fill"
+        case .upcoming: return "calendar"
+        case .anytime: return "circle.grid.2x2"
+        case .someday: return "archivebox"
+        }
+    }
+}
+
+enum TaskViewSelection: Hashable, Identifiable {
+    case inbox, today, upcoming, anytime, someday, logbook
+    case area(String)
+    case project(String)
+
+    var id: String {
+        switch self {
+        case .inbox: return "inbox"
+        case .today: return "today"
+        case .upcoming: return "upcoming"
+        case .anytime: return "anytime"
+        case .someday: return "someday"
+        case .logbook: return "logbook"
+        case .area(let area): return "area:\(area)"
+        case .project(let project): return "project:\(project)"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .inbox: return "Inbox"
+        case .today: return "Today"
+        case .upcoming: return "Upcoming"
+        case .anytime: return "Anytime"
+        case .someday: return "Someday"
+        case .logbook: return "Logbook"
+        case .area(let area): return area
+        case .project(let project): return project
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .inbox: return "tray"
+        case .today: return "star.fill"
+        case .upcoming: return "calendar"
+        case .anytime: return "circle.grid.2x2"
+        case .someday: return "archivebox"
+        case .logbook: return "checkmark.seal"
+        case .area: return "circle.hexagongrid"
+        case .project: return "folder"
+        }
+    }
+
+    var defaultBucket: TaskBucket {
+        switch self {
+        case .inbox: return .inbox
+        case .today: return .today
+        case .upcoming: return .upcoming
+        case .anytime, .area, .project: return .anytime
+        case .someday: return .someday
+        case .logbook: return .inbox
+        }
+    }
+}
+
 struct TodoItem: Identifiable, Codable, Equatable {
     let id: UUID
     var title: String
@@ -61,6 +143,13 @@ struct TodoItem: Identifiable, Codable, Equatable {
     var pomodorosSpent: Int
     var createdAt: Date
     var completedAt: Date?
+    var bucket: TaskBucket
+    var startDate: Date?
+    var deadline: Date?
+    var isThisEvening: Bool
+    var area: String
+    var project: String
+    var notes: String
 
     init(title: String) {
         self.id = UUID()
@@ -69,6 +158,35 @@ struct TodoItem: Identifiable, Codable, Equatable {
         self.pomodorosSpent = 0
         self.createdAt = Date()
         self.completedAt = nil
+        self.bucket = .today
+        self.startDate = nil
+        self.deadline = nil
+        self.isThisEvening = false
+        self.area = ""
+        self.project = ""
+        self.notes = ""
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, title, isCompleted, pomodorosSpent, createdAt, completedAt
+        case bucket, startDate, deadline, isThisEvening, area, project, notes
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(UUID.self, forKey: .id)
+        self.title = try c.decode(String.self, forKey: .title)
+        self.isCompleted = try c.decode(Bool.self, forKey: .isCompleted)
+        self.pomodorosSpent = try c.decode(Int.self, forKey: .pomodorosSpent)
+        self.createdAt = try c.decode(Date.self, forKey: .createdAt)
+        self.completedAt = try c.decodeIfPresent(Date.self, forKey: .completedAt)
+        self.bucket = try c.decodeIfPresent(TaskBucket.self, forKey: .bucket) ?? .today
+        self.startDate = try c.decodeIfPresent(Date.self, forKey: .startDate)
+        self.deadline = try c.decodeIfPresent(Date.self, forKey: .deadline)
+        self.isThisEvening = try c.decodeIfPresent(Bool.self, forKey: .isThisEvening) ?? false
+        self.area = try c.decodeIfPresent(String.self, forKey: .area) ?? ""
+        self.project = try c.decodeIfPresent(String.self, forKey: .project) ?? ""
+        self.notes = try c.decodeIfPresent(String.self, forKey: .notes) ?? ""
     }
 }
 

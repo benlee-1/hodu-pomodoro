@@ -10,7 +10,7 @@ struct HoduApp: App {
         WindowGroup("Hodu Pomodoro 🍊") {
             ScalingRoot()
                 .environmentObject(appDelegate.state)
-                .frame(minWidth: 520, minHeight: 420)
+                .frame(minWidth: 760, minHeight: 520)
                 .onAppear { appDelegate.registerMainWindow() }
         }
         .windowResizability(.contentMinSize)

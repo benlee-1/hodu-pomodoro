@@ -210,83 +210,42 @@ struct TaskListPanel: View {
     @State private var draggingTaskId: UUID? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("🍊 Today's Tasks")
-                .font(.system(size: 16, weight: .heavy, design: .rounded))
-                .foregroundStyle(HoduPalette.outline)
+        HStack(alignment: .top, spacing: 12) {
+            TaskSidebar()
+                .frame(width: 138)
 
-            HStack(spacing: 6) {
-                TextField("What are you working on?", text: $state.newTaskTitle)
-                    .textFieldStyle(.plain)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.9)))
-                    .foregroundStyle(HoduPalette.outline)
-                    .onSubmit { state.addTask() }
+            VStack(alignment: .leading, spacing: 10) {
+                TaskListHeader()
+                QuickFindField()
+                TaskComposer()
 
-                Button(action: { state.addTask() }) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 13, weight: .bold))
-                        .frame(width: 32, height: 32)
-                        .background(RoundedRectangle(cornerRadius: 8).fill(HoduPalette.orange))
-                        .foregroundStyle(Color.white)
-                }
-                .buttonStyle(.plain)
-            }
+                if isEmptyState {
+                    EmptyTaskState()
+                } else {
+                    ScrollView {
+                        VStack(spacing: 8) {
+                            taskSections
 
-            if state.tasks.isEmpty && state.completedHistory.isEmpty {
-                VStack(spacing: 6) {
-                    Text("☁️")
-                        .font(.system(size: 32))
-                    Text("No tasks yet.\nType one above!")
-                        .multilineTextAlignment(.center)
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                        .foregroundStyle(HoduPalette.outline.opacity(0.7))
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ScrollView {
-                    VStack(spacing: 6) {
-                        ForEach(state.tasks) { task in
-                            TaskRow(task: task)
-                                .opacity(draggingTaskId == task.id ? 0.4 : 1)
-                                .onDrag {
-                                    draggingTaskId = task.id
-                                    return NSItemProvider(object: task.id.uuidString as NSString)
-                                }
+                            Color.clear
+                                .frame(height: 12)
                                 .onDrop(
                                     of: [UTType.text],
                                     delegate: TaskDropDelegate(
-                                        target: task,
+                                        target: nil,
                                         state: state,
                                         draggingTaskId: $draggingTaskId
                                     )
                                 )
                         }
-                        // Trailing drop zone so tasks can be moved to the end.
-                        Color.clear
-                            .frame(height: 12)
-                            .onDrop(
-                                of: [UTType.text],
-                                delegate: TaskDropDelegate(
-                                    target: nil,
-                                    state: state,
-                                    draggingTaskId: $draggingTaskId
-                                )
-                            )
-
-                        if !state.completedHistory.isEmpty {
-                            HistorySection()
-                        }
                     }
                 }
-            }
 
-            if !state.selectedTaskIds.isEmpty {
-                SelectionFooter()
-            }
+                if !state.selectedTaskIds.isEmpty {
+                    SelectionFooter()
+                }
 
-            Spacer(minLength: 0)
+                Spacer(minLength: 0)
+            }
         }
         .padding(16)
         .background(
@@ -298,6 +257,276 @@ struct TaskListPanel: View {
                 )
         )
         .onExitCommand { state.clearSelection() }
+    }
+
+    private var isEmptyState: Bool {
+        switch state.selectedTaskList {
+        case .logbook:
+            return state.logbookTasks.isEmpty
+        case .today:
+            return state.todayNowTasks.isEmpty && state.todayEveningTasks.isEmpty
+        case .upcoming:
+            return state.upcomingTasks.isEmpty
+        default:
+            return state.visibleTasks.isEmpty
+        }
+    }
+
+    @ViewBuilder
+    private var taskSections: some View {
+        switch state.selectedTaskList {
+        case .today:
+            TaskSection(title: "Now", tasks: state.todayNowTasks, draggingTaskId: $draggingTaskId)
+            TaskSection(title: "This Evening", tasks: state.todayEveningTasks, draggingTaskId: $draggingTaskId)
+        case .upcoming:
+            TaskSection(title: "Scheduled", tasks: state.upcomingTasks, draggingTaskId: $draggingTaskId)
+        case .logbook:
+            TaskSection(title: "Completed", tasks: state.logbookTasks, draggingTaskId: $draggingTaskId, allowsDrag: false)
+        default:
+            TaskSection(title: state.selectedTaskList.title, tasks: state.visibleTasks, draggingTaskId: $draggingTaskId)
+        }
+    }
+}
+
+struct TaskSidebar: View {
+    @EnvironmentObject var state: AppState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(spacing: 4) {
+                SidebarButton(selection: .inbox)
+                SidebarButton(selection: .today)
+                SidebarButton(selection: .upcoming)
+                SidebarButton(selection: .anytime)
+                SidebarButton(selection: .someday)
+                SidebarButton(selection: .logbook)
+            }
+
+            if !state.areaNames.isEmpty {
+                SidebarGroup(title: "Areas")
+                ForEach(state.areaNames, id: \.self) { area in
+                    SidebarButton(selection: .area(area))
+                }
+            }
+
+            if !state.projectNames.isEmpty {
+                SidebarGroup(title: "Projects")
+                ForEach(state.projectNames, id: \.self) { project in
+                    SidebarButton(selection: .project(project))
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+struct SidebarGroup: View {
+    let title: String
+
+    var body: some View {
+        Text(title.uppercased())
+            .font(.system(size: 9, weight: .bold, design: .rounded))
+            .foregroundStyle(HoduPalette.outline.opacity(0.45))
+            .padding(.top, 4)
+            .padding(.horizontal, 8)
+    }
+}
+
+struct SidebarButton: View {
+    @EnvironmentObject var state: AppState
+    let selection: TaskViewSelection
+
+    private var isSelected: Bool { state.selectedTaskList == selection }
+
+    var body: some View {
+        Button {
+            state.selectedTaskList = selection
+        } label: {
+            HStack(spacing: 7) {
+                Image(systemName: selection.icon)
+                    .font(.system(size: 11, weight: .semibold))
+                    .frame(width: 14)
+                Text(selection.title)
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                let count = state.count(for: selection)
+                if count > 0 {
+                    Text("\(count)")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundStyle(HoduPalette.outline.opacity(0.55))
+                }
+            }
+            .foregroundStyle(isSelected ? HoduPalette.outline : HoduPalette.outline.opacity(0.68))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isSelected ? Color.white.opacity(0.88) : Color.clear)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct TaskListHeader: View {
+    @EnvironmentObject var state: AppState
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: state.selectedTaskList.icon)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(HoduPalette.orange)
+            Text(state.selectedTaskList.title)
+                .font(.system(size: 17, weight: .heavy, design: .rounded))
+                .foregroundStyle(HoduPalette.outline)
+            Spacer()
+            if state.selectedTaskList == .today {
+                Text("\(state.todayNowTasks.count + state.todayEveningTasks.count) planned")
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .foregroundStyle(HoduPalette.outline.opacity(0.55))
+            }
+        }
+    }
+}
+
+struct QuickFindField: View {
+    @EnvironmentObject var state: AppState
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(HoduPalette.outline.opacity(0.45))
+            TextField("Quick Find", text: $state.quickFindQuery)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+            if !state.quickFindQuery.isEmpty {
+                Button(action: { state.quickFindQuery = "" }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(HoduPalette.outline.opacity(0.45))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.72)))
+    }
+}
+
+struct TaskComposer: View {
+    @EnvironmentObject var state: AppState
+
+    var body: some View {
+        HStack(spacing: 6) {
+            TextField(composerPlaceholder, text: $state.newTaskTitle)
+                .textFieldStyle(.plain)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.9)))
+                .foregroundStyle(HoduPalette.outline)
+                .onSubmit { state.addTask() }
+                .disabled(state.selectedTaskList == .logbook)
+
+            Button(action: { state.addTask() }) {
+                Image(systemName: "plus")
+                    .font(.system(size: 13, weight: .bold))
+                    .frame(width: 32, height: 32)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(HoduPalette.orange))
+                    .foregroundStyle(Color.white)
+            }
+            .buttonStyle(.plain)
+            .help("Add to \(state.selectedTaskList.title)")
+            .disabled(state.selectedTaskList == .logbook)
+            .opacity(state.selectedTaskList == .logbook ? 0.45 : 1)
+        }
+    }
+
+    private var composerPlaceholder: String {
+        switch state.selectedTaskList {
+        case .inbox: return "Capture a task"
+        case .today: return "Plan today's next task"
+        case .upcoming: return "Schedule something for tomorrow"
+        case .anytime: return "Add an anytime task"
+        case .someday: return "Save an idea for someday"
+        case .logbook: return "Logbook is read-only"
+        case .area: return "Add to this area"
+        case .project: return "Add to this project"
+        }
+    }
+}
+
+struct EmptyTaskState: View {
+    @EnvironmentObject var state: AppState
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Text("☁️")
+                .font(.system(size: 32))
+            Text(emptyCopy)
+                .multilineTextAlignment(.center)
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .foregroundStyle(HoduPalette.outline.opacity(0.7))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var emptyCopy: String {
+        if !state.quickFindQuery.isEmpty { return "No matches." }
+        switch state.selectedTaskList {
+        case .inbox: return "Inbox is clear.\nCapture anything new above."
+        case .today: return "Nothing planned today.\nAdd a focus task above."
+        case .upcoming: return "No upcoming tasks.\nAdd one to start tomorrow."
+        case .anytime: return "No anytime tasks."
+        case .someday: return "No someday ideas yet."
+        case .logbook: return "No completed tasks yet."
+        case .area: return "No tasks in this area."
+        case .project: return "No tasks in this project."
+        }
+    }
+}
+
+struct TaskSection: View {
+    @EnvironmentObject var state: AppState
+    let title: String
+    let tasks: [TodoItem]
+    @Binding var draggingTaskId: UUID?
+    var allowsDrag: Bool = true
+
+    var body: some View {
+        if !tasks.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .font(.system(size: 10, weight: .heavy, design: .rounded))
+                    .foregroundStyle(HoduPalette.outline.opacity(0.55))
+                    .padding(.horizontal, 2)
+
+                ForEach(tasks) { task in
+                    if allowsDrag {
+                        TaskRow(task: task)
+                            .opacity(draggingTaskId == task.id ? 0.4 : 1)
+                            .onDrag {
+                                draggingTaskId = task.id
+                                return NSItemProvider(object: task.id.uuidString as NSString)
+                            }
+                            .onDrop(
+                                of: [UTType.text],
+                                delegate: TaskDropDelegate(
+                                    target: task,
+                                    state: state,
+                                    draggingTaskId: $draggingTaskId
+                                )
+                            )
+                    } else {
+                        TaskRow(task: task)
+                            .opacity(draggingTaskId == task.id ? 0.4 : 1)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -360,6 +589,10 @@ struct TaskRow: View {
     @State private var isEditing: Bool = false
     @State private var draft: String = ""
     @State private var isHovering: Bool = false
+    @State private var showingDetails: Bool = false
+    @State private var draftArea: String = ""
+    @State private var draftProject: String = ""
+    @State private var draftNotes: String = ""
     @FocusState private var editorFocused: Bool
 
     var isActive: Bool { state.activeTaskId == task.id }
@@ -411,18 +644,28 @@ struct TaskRow: View {
                         state.setActive(task)
                     }
                 }) {
-                    HStack(spacing: 6) {
+                    VStack(alignment: .leading, spacing: 3) {
                         Text(task.title)
                             .font(.system(size: 13, weight: .medium, design: .rounded))
                             .foregroundStyle(HoduPalette.outline)
                             .strikethrough(task.isCompleted, color: HoduPalette.outline.opacity(0.6))
                             .lineLimit(1)
-                        Spacer()
-                        if task.pomodorosSpent > 0 {
-                            Text(String(repeating: "🍊", count: min(task.pomodorosSpent, 5)))
-                                .font(.system(size: 10))
+
+                        if !metadataChips.isEmpty || task.pomodorosSpent > 0 {
+                            HStack(spacing: 5) {
+                                ForEach(metadataChips, id: \.self) { chip in
+                                    Text(chip)
+                                        .font(.system(size: 9, weight: .semibold, design: .rounded))
+                                        .foregroundStyle(HoduPalette.outline.opacity(0.52))
+                                }
+                                if task.pomodorosSpent > 0 {
+                                    Text(String(repeating: "🍊", count: min(task.pomodorosSpent, 5)))
+                                        .font(.system(size: 9))
+                                }
+                            }
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -430,6 +673,34 @@ struct TaskRow: View {
             }
 
             if !isEditing {
+                Menu {
+                    scheduleMenu
+                } label: {
+                    Image(systemName: "calendar.badge.clock")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(HoduPalette.outline.opacity(0.5))
+                }
+                .menuStyle(.borderlessButton)
+                .frame(width: 16)
+                .help("Schedule or move")
+
+                Button(action: beginDetails) {
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(HoduPalette.outline.opacity(0.5))
+                }
+                .buttonStyle(.plain)
+                .popover(isPresented: $showingDetails, arrowEdge: .trailing) {
+                    TaskDetailsPopover(
+                        task: task,
+                        draftArea: $draftArea,
+                        draftProject: $draftProject,
+                        draftNotes: $draftNotes
+                    )
+                    .environmentObject(state)
+                }
+                .help("Task details")
+
                 Button(action: beginEdit) {
                     Image(systemName: "pencil")
                         .font(.system(size: 10, weight: .bold))
@@ -489,9 +760,55 @@ struct TaskRow: View {
             Button("Copy") { copyTitle() }
             Button("Edit") { beginEdit() }
             Divider()
+            Button("Move to Inbox") { state.scheduleTask(task, to: .inbox) }
+            Button("Move to Today") { state.scheduleTask(task, to: .today) }
+            Button("Move to This Evening") { state.scheduleTask(task, to: .today, thisEvening: true) }
+            Button("Move to Tomorrow") { state.scheduleTask(task, to: .upcoming, startDate: tomorrow) }
+            Button("Move to Anytime") { state.scheduleTask(task, to: .anytime) }
+            Button("Move to Someday") { state.scheduleTask(task, to: .someday) }
+            Divider()
             Button("Delete", role: .destructive) { state.deleteTask(task) }
         }
     }
+
+    @ViewBuilder
+    private var scheduleMenu: some View {
+        Button("Inbox") { state.scheduleTask(task, to: .inbox) }
+        Button("Today") { state.scheduleTask(task, to: .today) }
+        Button("This Evening") { state.scheduleTask(task, to: .today, thisEvening: true) }
+        Button("Tomorrow") { state.scheduleTask(task, to: .upcoming, startDate: tomorrow) }
+        Button("Anytime") { state.scheduleTask(task, to: .anytime) }
+        Button("Someday") { state.scheduleTask(task, to: .someday) }
+    }
+
+    private var metadataChips: [String] {
+        var chips: [String] = []
+        if !task.project.isEmpty { chips.append("▸ \(task.project)") }
+        if !task.area.isEmpty { chips.append("· \(task.area)") }
+        if task.bucket == .upcoming, let start = task.startDate {
+            chips.append(Self.shortDateFormatter.string(from: start))
+        } else if task.bucket == .someday {
+            chips.append("Someday")
+        } else if task.bucket == .inbox {
+            chips.append("Inbox")
+        } else if task.isThisEvening {
+            chips.append("Evening")
+        }
+        if let deadline = task.deadline {
+            chips.append("Due \(Self.shortDateFormatter.string(from: deadline))")
+        }
+        return chips
+    }
+
+    private var tomorrow: Date {
+        Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: Date())) ?? Date()
+    }
+
+    private static let shortDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MMM d"
+        return f
+    }()
 
     private func copyTitle() {
         let pb = NSPasteboard.general
@@ -505,6 +822,13 @@ struct TaskRow: View {
         Task { @MainActor in editorFocused = true }
     }
 
+    private func beginDetails() {
+        draftArea = task.area
+        draftProject = task.project
+        draftNotes = task.notes
+        showingDetails = true
+    }
+
     private func commitEdit() {
         if !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             state.renameTask(task, to: draft)
@@ -514,6 +838,80 @@ struct TaskRow: View {
 
     private func cancelEdit() {
         isEditing = false
+    }
+}
+
+struct TaskDetailsPopover: View {
+    @EnvironmentObject var state: AppState
+    let task: TodoItem
+    @Binding var draftArea: String
+    @Binding var draftProject: String
+    @Binding var draftNotes: String
+
+    @State private var hasDeadline: Bool = false
+    @State private var deadline: Date = Date()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(task.title)
+                .font(.system(size: 13, weight: .heavy, design: .rounded))
+                .foregroundStyle(HoduPalette.adaptiveText)
+                .lineLimit(2)
+
+            DetailField(label: "Area", text: $draftArea, placeholder: "e.g. Work")
+            DetailField(label: "Project", text: $draftProject, placeholder: "e.g. Launch plan")
+            DetailField(label: "Notes", text: $draftNotes, placeholder: "Add context")
+
+            Toggle("Deadline", isOn: $hasDeadline)
+                .toggleStyle(.checkbox)
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+
+            if hasDeadline {
+                DatePicker("", selection: $deadline, displayedComponents: .date)
+                    .labelsHidden()
+                    .datePickerStyle(.compact)
+            }
+
+            HStack {
+                Button("Save") {
+                    state.updateTaskMetadata(task, area: draftArea, project: draftProject, notes: draftNotes)
+                    state.setDeadline(task, to: hasDeadline ? deadline : nil)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+
+                Button("Clear Deadline") {
+                    hasDeadline = false
+                    state.setDeadline(task, to: nil)
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                .foregroundStyle(HoduPalette.orange)
+            }
+        }
+        .padding(14)
+        .frame(width: 260)
+        .onAppear {
+            hasDeadline = task.deadline != nil
+            deadline = task.deadline ?? Date()
+        }
+    }
+}
+
+struct DetailField: View {
+    let label: String
+    @Binding var text: String
+    let placeholder: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label)
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .foregroundStyle(HoduPalette.adaptiveText.opacity(0.62))
+            TextField(placeholder, text: $text)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 11, weight: .medium, design: .rounded))
+        }
     }
 }
 

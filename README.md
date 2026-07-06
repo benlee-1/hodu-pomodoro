@@ -34,13 +34,19 @@ tools (`xcode-select --install`). No other dependencies.
   open the settings popover. Adjust Focus / Short Break / Long Break minutes
   and cycles-until-long-break with steppers. Defaults shown as a guide, and
   a one-click "Reset to defaults".
-- ✅ **Task list with inline editing**
-  - Add tasks, click to set as the active focus target.
+- ✅ **Things-style task organizer**
+  - Capture tasks into **Inbox**, then plan them into **Today**, **Upcoming**,
+    **Anytime**, or **Someday**.
+  - **Today** is split into **Now** and **This Evening** so later tasks stay
+    out of the current focus lane.
+  - Add lightweight **Areas**, **Projects**, notes, and deadlines from each
+    task's info button.
+  - Use **Quick Find** to filter the current list by title, notes, area, or
+    project.
+  - Move tasks quickly from the calendar button or row context menu.
+  - Click a task to set it as the active Pomodoro focus target.
   - **Double-click** (or click the ✎ pencil) to edit a task title inline.
-  - Checking a task off drops it to the bottom of today's list.
-  - At end of day (midnight or on next launch), completed tasks move into
-    **"Recently done"** — a collapsible history of the last 10 completed
-    tasks.
+  - Checking a task off moves it into **Logbook** history.
   - Every completed focus session adds a 🍊 next to the active task.
 - 🪟 **Floating mini-widget** — press **⇧⌘M** (or click "Minimize to
   floating widget") to collapse into a small always-on-top widget at the top
@@ -71,7 +77,7 @@ Standard macOS window shortcuts (⌘W, ⌘M, etc.) work too.
 
 ```
 ~/Library/Application Support/HoduPomodoro/
-  tasks.json       today's tasks
+  tasks.json       tasks, schedule buckets, areas/projects, notes, deadlines
   settings.json    durations + cycles
   history.json     last 10 completed tasks
 ```

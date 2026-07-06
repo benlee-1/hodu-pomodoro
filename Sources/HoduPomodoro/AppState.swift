@@ -14,6 +14,8 @@ final class AppState: ObservableObject {
     @Published var activeTaskId: UUID? = nil
     @Published var newTaskTitle: String = ""
     @Published var completedHistory: [TodoItem] = []  // capped at 10, newest first
+    @Published var selectedTaskList: TaskViewSelection = .today
+    @Published var quickFindQuery: String = ""
 
     // Multi-selection — ephemeral planning aid, not persisted. Separate from
     // `activeTaskId`: selection is "what I'm considering doing"; focus is
@@ -191,9 +193,29 @@ final class AppState: ObservableObject {
     func addTask() {
         let trimmed = newTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        tasks.append(TodoItem(title: trimmed))
+        var task = TodoItem(title: trimmed)
+        applySelectedListDefaults(to: &task)
+        tasks.append(task)
         newTaskTitle = ""
         saveTasks()
+    }
+
+    private func applySelectedListDefaults(to task: inout TodoItem) {
+        task.bucket = selectedTaskList.defaultBucket
+
+        switch selectedTaskList {
+        case .today:
+            task.startDate = Calendar.current.startOfDay(for: Date())
+            task.isThisEvening = false
+        case .upcoming:
+            task.startDate = Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: Date()))
+        case .area(let area):
+            task.area = area
+        case .project(let project):
+            task.project = project
+        case .logbook, .inbox, .anytime, .someday:
+            break
+        }
     }
 
     func toggleTask(_ task: TodoItem) {
@@ -202,6 +224,31 @@ final class AppState: ObservableObject {
         tasks[idx].isCompleted = nowCompleted
         tasks[idx].completedAt = nowCompleted ? Date() : nil
         if nowCompleted { selectedTaskIds.remove(task.id) }
+        saveTasks()
+    }
+
+    func scheduleTask(_ task: TodoItem, to bucket: TaskBucket, startDate: Date? = nil, thisEvening: Bool = false) {
+        guard let idx = tasks.firstIndex(where: { $0.id == task.id }) else { return }
+        tasks[idx].bucket = bucket
+        tasks[idx].startDate = bucket == .today ? Calendar.current.startOfDay(for: Date()) : startDate
+        tasks[idx].isThisEvening = bucket == .today && thisEvening
+        if bucket != .upcoming && bucket != .today {
+            tasks[idx].startDate = nil
+        }
+        saveTasks()
+    }
+
+    func setDeadline(_ task: TodoItem, to deadline: Date?) {
+        guard let idx = tasks.firstIndex(where: { $0.id == task.id }) else { return }
+        tasks[idx].deadline = deadline.map { Calendar.current.startOfDay(for: $0) }
+        saveTasks()
+    }
+
+    func updateTaskMetadata(_ task: TodoItem, area: String, project: String, notes: String) {
+        guard let idx = tasks.firstIndex(where: { $0.id == task.id }) else { return }
+        tasks[idx].area = area.trimmingCharacters(in: .whitespacesAndNewlines)
+        tasks[idx].project = project.trimmingCharacters(in: .whitespacesAndNewlines)
+        tasks[idx].notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
         saveTasks()
     }
 
@@ -247,6 +294,100 @@ final class AppState: ObservableObject {
         saveTasks()
     }
 
+    // MARK: - Things-style navigation
+
+    var visibleTasks: [TodoItem] {
+        filtered(tasksForSelection(selectedTaskList))
+    }
+
+    var todayNowTasks: [TodoItem] {
+        filtered(tasks.filter { isTodayTask($0) && !$0.isThisEvening })
+    }
+
+    var todayEveningTasks: [TodoItem] {
+        filtered(tasks.filter { isTodayTask($0) && $0.isThisEvening })
+    }
+
+    var upcomingTasks: [TodoItem] {
+        filtered(tasks.filter { !$0.isCompleted && $0.bucket == .upcoming })
+            .sorted { taskSortDate($0) < taskSortDate($1) }
+    }
+
+    var logbookTasks: [TodoItem] {
+        filtered((tasks.filter { $0.isCompleted } + completedHistory)
+            .sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) })
+    }
+
+    var areaNames: [String] {
+        sortedUnique(tasks.map(\.area))
+    }
+
+    var projectNames: [String] {
+        sortedUnique(tasks.map(\.project))
+    }
+
+    func count(for selection: TaskViewSelection) -> Int {
+        switch selection {
+        case .logbook: return logbookTasks.count
+        default: return tasksForSelection(selection).count
+        }
+    }
+
+    private func tasksForSelection(_ selection: TaskViewSelection) -> [TodoItem] {
+        switch selection {
+        case .inbox:
+            return tasks.filter { !$0.isCompleted && $0.bucket == .inbox }
+        case .today:
+            return tasks.filter { isTodayTask($0) }
+        case .upcoming:
+            return upcomingTasks
+        case .anytime:
+            return tasks.filter { !$0.isCompleted && $0.bucket == .anytime }
+        case .someday:
+            return tasks.filter { !$0.isCompleted && $0.bucket == .someday }
+        case .logbook:
+            return logbookTasks
+        case .area(let area):
+            return tasks.filter { !$0.isCompleted && $0.area == area }
+        case .project(let project):
+            return tasks.filter { !$0.isCompleted && $0.project == project }
+        }
+    }
+
+    private func filtered(_ source: [TodoItem]) -> [TodoItem] {
+        let query = quickFindQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return source }
+        return source.filter { task in
+            task.title.lowercased().contains(query)
+            || task.notes.lowercased().contains(query)
+            || task.area.lowercased().contains(query)
+            || task.project.lowercased().contains(query)
+        }
+    }
+
+    private func isTodayTask(_ task: TodoItem) -> Bool {
+        guard !task.isCompleted else { return false }
+        if task.bucket == .today { return true }
+        let today = Calendar.current.startOfDay(for: Date())
+        if let start = task.startDate, Calendar.current.startOfDay(for: start) <= today {
+            return true
+        }
+        if let deadline = task.deadline, Calendar.current.startOfDay(for: deadline) <= today {
+            return true
+        }
+        return false
+    }
+
+    private func taskSortDate(_ task: TodoItem) -> Date {
+        task.startDate ?? task.deadline ?? task.createdAt
+    }
+
+    private func sortedUnique(_ values: [String]) -> [String] {
+        Array(Set(values.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }))
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
     // MARK: - Rollover / history
 
     private func rolloverOldCompletedTasks() {
@@ -289,9 +430,11 @@ final class AppState: ObservableObject {
 
     func deleteTask(_ task: TodoItem) {
         tasks.removeAll { $0.id == task.id }
+        completedHistory.removeAll { $0.id == task.id }
         if activeTaskId == task.id { activeTaskId = nil }
         selectedTaskIds.remove(task.id)
         saveTasks()
+        saveHistory()
     }
 
     func setActive(_ task: TodoItem) {
