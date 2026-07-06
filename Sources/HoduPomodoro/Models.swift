@@ -24,6 +24,34 @@ struct HeartPop: Identifiable, Equatable {
     var y: CGFloat
 }
 
+enum CalendarEventSource: String, Codable {
+    case apple = "Apple"
+    case google = "Google"
+}
+
+struct CalendarEventItem: Identifiable, Codable, Equatable {
+    var id: String
+    var title: String
+    var startDate: Date
+    var endDate: Date?
+    var location: String
+    var source: CalendarEventSource
+
+    var timeRangeText: String {
+        if Calendar.current.isDate(startDate, inSameDayAs: endDate ?? startDate),
+           let endDate {
+            return "\(Self.timeFormatter.string(from: startDate))-\(Self.timeFormatter.string(from: endDate))"
+        }
+        return Self.timeFormatter.string(from: startDate)
+    }
+
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "h:mm a"
+        return f
+    }()
+}
+
 enum TimerMode: String, Codable, CaseIterable, Identifiable {
     case work, shortBreak, longBreak
 
@@ -196,9 +224,14 @@ struct Settings: Codable {
     var longBreakMinutes: Int = 15
     var cyclesUntilLongBreak: Int = 4
     var overlayPinned: Bool = false
-    /// Global UI zoom factor for the main window. Clamped to
-    /// `Settings.minUIScale...Settings.maxUIScale` whenever it's written.
+    var nightMode: Bool = false
+    /// Global UI zoom factor for normal windows. Fullscreen always renders at
+    /// native scale to avoid magnifying the beach/canvas output.
     var uiScale: Double = 1.0
+    var appleCalendarEnabled: Bool = false
+    var googleCalendarEnabled: Bool = false
+    var googleCalendarName: String = "Google Calendar"
+    var googleCalendarURL: String = ""
 
     static let minUIScale: Double = 0.8
     static let maxUIScale: Double = 2.0
@@ -207,7 +240,9 @@ struct Settings: Codable {
     init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case workMinutes, shortBreakMinutes, longBreakMinutes, cyclesUntilLongBreak, overlayPinned, uiScale
+        case workMinutes, shortBreakMinutes, longBreakMinutes, cyclesUntilLongBreak, overlayPinned, nightMode
+        case uiScale
+        case appleCalendarEnabled, googleCalendarEnabled, googleCalendarName, googleCalendarURL
     }
 
     init(from decoder: Decoder) throws {
@@ -217,8 +252,13 @@ struct Settings: Codable {
         self.longBreakMinutes = try c.decodeIfPresent(Int.self, forKey: .longBreakMinutes) ?? 15
         self.cyclesUntilLongBreak = try c.decodeIfPresent(Int.self, forKey: .cyclesUntilLongBreak) ?? 4
         self.overlayPinned = try c.decodeIfPresent(Bool.self, forKey: .overlayPinned) ?? false
+        self.nightMode = try c.decodeIfPresent(Bool.self, forKey: .nightMode) ?? false
         let rawScale = try c.decodeIfPresent(Double.self, forKey: .uiScale) ?? 1.0
         self.uiScale = min(max(rawScale, Settings.minUIScale), Settings.maxUIScale)
+        self.appleCalendarEnabled = try c.decodeIfPresent(Bool.self, forKey: .appleCalendarEnabled) ?? false
+        self.googleCalendarEnabled = try c.decodeIfPresent(Bool.self, forKey: .googleCalendarEnabled) ?? false
+        self.googleCalendarName = try c.decodeIfPresent(String.self, forKey: .googleCalendarName) ?? "Google Calendar"
+        self.googleCalendarURL = try c.decodeIfPresent(String.self, forKey: .googleCalendarURL) ?? ""
     }
 
     func seconds(for mode: TimerMode) -> Int {

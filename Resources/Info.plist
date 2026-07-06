@@ -30,6 +30,10 @@
     <string>public.app-category.productivity</string>
     <key>NSSupportsAutomaticGraphicsSwitching</key>
     <true/>
+    <key>NSCalendarsUsageDescription</key>
+    <string>Hodu uses calendar access to show today's events next to your focus tasks.</string>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>Hodu uses calendar access to show today's events next to your focus tasks.</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
 </dict>

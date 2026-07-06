@@ -33,21 +33,14 @@ struct HoduApp: App {
     }
 }
 
-/// Scales the entire main-window content tree by `settings.uiScale`. Inner
-/// SwiftUI layout runs at `windowSize / scale`, then is visually scaled back
-/// up — so every font, padding, and hit target grows together without
-/// rewriting individual `.font(.system(size:))` calls.
+/// Kept as the root wrapper for window-level behavior. It intentionally does
+/// not scale the SwiftUI tree: whole-view scaling makes Canvas pixel art and
+/// text look blurry after zooming.
 struct ScalingRoot: View {
     @EnvironmentObject var state: AppState
 
     var body: some View {
-        GeometryReader { geo in
-            let scale = state.settings.uiScale
-            ContentView()
-                .frame(width: geo.size.width / scale,
-                       height: geo.size.height / scale)
-                .scaleEffect(scale, anchor: .topLeading)
-        }
+        ContentView()
     }
 }
 
@@ -95,6 +88,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             name: NSApplication.didBecomeActiveNotification,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(mainWindowDidEnterFullScreen(_:)),
+            name: NSWindow.didEnterFullScreenNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(mainWindowDidExitFullScreen(_:)),
+            name: NSWindow.didExitFullScreenNotification,
+            object: nil
+        )
     }
 
     @objc private func mainWindowBecameKey(_ note: Notification) {
@@ -117,6 +122,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func appDidBecomeActive(_ note: Notification) {
         if overlayPinned || widgetMode { return }
         floatingPanel?.orderOut(nil)
+    }
+
+    @objc private func mainWindowDidEnterFullScreen(_ note: Notification) {
+        guard let window = note.object as? NSWindow, isAppMainWindow(window) else { return }
+        mainWindow = window
+        state.isMainWindowFullscreen = true
+    }
+
+    @objc private func mainWindowDidExitFullScreen(_ note: Notification) {
+        guard let window = note.object as? NSWindow, isAppMainWindow(window) else { return }
+        mainWindow = window
+        state.isMainWindowFullscreen = false
     }
 
     func setOverlayPinned(_ on: Bool) {
@@ -167,35 +184,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - UI zoom
 
-    func zoomIn() { applyScale(state.settings.uiScale + Settings.uiScaleStep) }
-    func zoomOut() { applyScale(state.settings.uiScale - Settings.uiScaleStep) }
-    func resetZoom() { applyScale(1.0) }
+    func zoomIn() { resizeMainWindow(by: 1.1) }
+    func zoomOut() { resizeMainWindow(by: 0.9) }
+    func resetZoom() { resetMainWindowSize() }
 
-    private func applyScale(_ requested: Double) {
-        let clamped = min(max(requested, Settings.minUIScale), Settings.maxUIScale)
-        let old = state.settings.uiScale
-        // Avoid float noise when already at a bound — also skips a no-op
-        // window resize when the user hammers the shortcut past the limit.
-        guard abs(clamped - old) > 0.0001 else { return }
-        state.settings.uiScale = clamped
-
+    private func resizeMainWindow(by ratio: CGFloat) {
         guard let window = mainWindow ?? NSApp.windows.first(where: { isAppMainWindow($0) }) else { return }
-        // In native fullscreen the window size is pinned to the display;
-        // calling setFrame here shrinks the window inside the fullscreen
-        // container and macOS fills the slack with black gutters. The
-        // ScalingRoot view's `geo.size / scale` math fills the screen
-        // correctly at any scale, so just skip the resize.
-        if window.styleMask.contains(.fullScreen) { return }
-        let ratio = clamped / old
+
+        if window.styleMask.contains(.fullScreen) {
+            state.isMainWindowFullscreen = true
+            state.settings.uiScale = 1.0
+            return
+        }
+
+        state.isMainWindowFullscreen = false
+        state.settings.uiScale = 1.0
+
         let current = window.frame
         var newSize = NSSize(width: current.width * ratio, height: current.height * ratio)
         if let screen = window.screen ?? NSScreen.main {
             let vf = screen.visibleFrame
-            newSize.width = min(newSize.width, vf.width)
-            newSize.height = min(newSize.height, vf.height)
+            newSize.width = min(max(newSize.width, 760), vf.width)
+            newSize.height = min(max(newSize.height, 520), vf.height)
         }
-        // Anchor on top-left so the window doesn't crawl down-screen when
-        // shrinking (NSWindow origin is bottom-left).
+        let newOrigin = NSPoint(
+            x: current.origin.x,
+            y: current.origin.y + (current.height - newSize.height)
+        )
+        window.setFrame(NSRect(origin: newOrigin, size: newSize), display: true, animate: false)
+    }
+
+    private func resetMainWindowSize() {
+        guard let window = mainWindow ?? NSApp.windows.first(where: { isAppMainWindow($0) }) else { return }
+        state.settings.uiScale = 1.0
+        if window.styleMask.contains(.fullScreen) {
+            state.isMainWindowFullscreen = true
+            return
+        }
+
+        let current = window.frame
+        let newSize = NSSize(width: 760, height: 520)
         let newOrigin = NSPoint(
             x: current.origin.x,
             y: current.origin.y + (current.height - newSize.height)
@@ -204,6 +232,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func minimizeToWidget() {
+        if let window = mainWindow ?? NSApp.windows.first(where: { isAppMainWindow($0) }),
+           window.styleMask.contains(.fullScreen) {
+            state.isMainWindowFullscreen = true
+            state.settings.uiScale = 1.0
+        }
         widgetMode = true
         showFloatingWidget()
         for window in NSApp.windows where isAppMainWindow(window) {
@@ -223,6 +256,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }
             if let w = NSApp.windows.first(where: { self.isAppMainWindow($0) }) {
                 self.mainWindow = w
+                self.state.isMainWindowFullscreen = w.styleMask.contains(.fullScreen)
                 NSLog("[Hodu] registered main window: \(w.title)")
             }
         }

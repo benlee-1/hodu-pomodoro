@@ -16,6 +16,9 @@ final class AppState: ObservableObject {
     @Published var completedHistory: [TodoItem] = []  // capped at 10, newest first
     @Published var selectedTaskList: TaskViewSelection = .today
     @Published var quickFindQuery: String = ""
+    @Published var calendarEvents: [CalendarEventItem] = []
+    @Published var calendarStatus: CalendarConnectionStatus = .idle
+    @Published var isMainWindowFullscreen: Bool = false
 
     // Multi-selection — ephemeral planning aid, not persisted. Separate from
     // `activeTaskId`: selection is "what I'm considering doing"; focus is
@@ -44,6 +47,7 @@ final class AppState: ObservableObject {
     }
 
     private var timer: Timer?
+    private let calendarService = CalendarService()
     private let tasksURL: URL
     private let settingsURL: URL
     private let historyURL: URL
@@ -62,7 +66,8 @@ final class AppState: ObservableObject {
         self.settingsURL = dir.appendingPathComponent("settings.json")
         self.historyURL = dir.appendingPathComponent("history.json")
 
-        let loaded = Self.loadSettings(from: settingsURL)
+        var loaded = Self.loadSettings(from: settingsURL)
+        loaded.uiScale = 1.0
         self.settings = loaded
         self.remainingSeconds = loaded.seconds(for: .work)
         self.tasks = Self.loadTasks(from: tasksURL)
@@ -70,6 +75,9 @@ final class AppState: ObservableObject {
         startAmbientTimers()
         rolloverOldCompletedTasks()
         scheduleMidnightRollover()
+        if loaded.appleCalendarEnabled || loaded.googleCalendarEnabled {
+            refreshCalendarEvents()
+        }
     }
 
     private func startAmbientTimers() {
@@ -200,6 +208,16 @@ final class AppState: ObservableObject {
         saveTasks()
     }
 
+    func addTask(from event: CalendarEventItem) {
+        var task = TodoItem(title: event.title)
+        task.bucket = .today
+        task.startDate = Calendar.current.startOfDay(for: event.startDate)
+        task.notes = calendarTaskNotes(for: event)
+        tasks.append(task)
+        selectedTaskList = .today
+        saveTasks()
+    }
+
     private func applySelectedListDefaults(to task: inout TodoItem) {
         task.bucket = selectedTaskList.defaultBucket
 
@@ -250,6 +268,78 @@ final class AppState: ObservableObject {
         tasks[idx].project = project.trimmingCharacters(in: .whitespacesAndNewlines)
         tasks[idx].notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
         saveTasks()
+    }
+
+    // MARK: - Calendar integrations
+
+    var calendarConnectionsEnabled: Bool {
+        settings.appleCalendarEnabled || settings.googleCalendarEnabled
+    }
+
+    func connectAppleCalendar() {
+        calendarStatus = .loading
+        Task { @MainActor in
+            let granted = await calendarService.requestAppleCalendarAccess()
+            settings.appleCalendarEnabled = granted
+            calendarStatus = granted
+                ? .ready("Apple Calendar connected")
+                : .error("Apple Calendar access was not granted")
+            if granted { refreshCalendarEvents() }
+        }
+    }
+
+    func disconnectAppleCalendar() {
+        settings.appleCalendarEnabled = false
+        refreshCalendarEvents()
+    }
+
+    func saveGoogleCalendar(name: String, urlString: String) {
+        settings.googleCalendarName = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "Google Calendar"
+            : name.trimmingCharacters(in: .whitespacesAndNewlines)
+        settings.googleCalendarURL = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+        settings.googleCalendarEnabled = URL(string: settings.googleCalendarURL) != nil
+        refreshCalendarEvents()
+    }
+
+    func disconnectGoogleCalendar() {
+        settings.googleCalendarEnabled = false
+        settings.googleCalendarURL = ""
+        refreshCalendarEvents()
+    }
+
+    func refreshCalendarEvents() {
+        guard calendarConnectionsEnabled else {
+            calendarEvents = []
+            calendarStatus = .idle
+            return
+        }
+
+        calendarStatus = .loading
+        let range = todayCalendarRange()
+        let settingsSnapshot = settings
+        Task { @MainActor in
+            do {
+                let events = try await calendarService.fetchEvents(settings: settingsSnapshot, range: range)
+                calendarEvents = events
+                calendarStatus = .ready(events.isEmpty ? "No calendar events today" : "\(events.count) calendar events today")
+            } catch {
+                calendarStatus = .error("Calendar refresh failed")
+            }
+        }
+    }
+
+    private func todayCalendarRange() -> DateInterval {
+        let cal = Calendar.current
+        let start = cal.startOfDay(for: Date())
+        let end = cal.date(byAdding: .day, value: 1, to: start) ?? Date().addingTimeInterval(24 * 60 * 60)
+        return DateInterval(start: start, end: end)
+    }
+
+    private func calendarTaskNotes(for event: CalendarEventItem) -> String {
+        var lines = ["Imported from \(event.source.rawValue) Calendar", event.timeRangeText]
+        if !event.location.isEmpty { lines.append(event.location) }
+        return lines.joined(separator: "\n")
     }
 
     // MARK: - Multi-selection

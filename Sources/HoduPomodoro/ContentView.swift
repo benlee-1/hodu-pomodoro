@@ -9,7 +9,7 @@ struct ContentView: View {
         GeometryReader { geo in
             ZStack(alignment: .top) {
                 // Beach background fills whole window and resizes with it.
-                BeachScene()
+                BeachScene(isNight: state.settings.nightMode)
                     .ignoresSafeArea()
 
                 // Panels float in the top portion; bottom stays clear so
@@ -30,7 +30,10 @@ struct ContentView: View {
                 }
             }
         }
-        .background(Color(red: 0.53, green: 0.80, blue: 0.95))
+        .preferredColorScheme(state.settings.nightMode ? .dark : .light)
+        .background(state.settings.nightMode
+                    ? Color(red: 0.06, green: 0.08, blue: 0.18)
+                    : Color(red: 0.53, green: 0.80, blue: 0.95))
     }
 }
 
@@ -39,6 +42,7 @@ struct ContentView: View {
 struct TimerPanel: View {
     @EnvironmentObject var state: AppState
     @State private var showingSettings: Bool = false
+    @State private var showingCalendarSettings: Bool = false
 
     var body: some View {
         VStack(spacing: 14) {
@@ -55,8 +59,8 @@ struct TimerPanel: View {
                             .background(
                                 RoundedRectangle(cornerRadius: 8)
                                     .fill(state.mode == mode
-                                          ? Color.white.opacity(0.95)
-                                          : Color.white.opacity(0.35))
+                                          ? HoduPalette.selectedControlFill
+                                          : HoduPalette.controlFill)
                             )
                             .foregroundStyle(HoduPalette.outline)
                     }
@@ -71,7 +75,7 @@ struct TimerPanel: View {
                         .padding(.vertical, 6)
                         .background(
                             RoundedRectangle(cornerRadius: 8)
-                                .fill(Color.white.opacity(0.35))
+                                .fill(HoduPalette.controlFill)
                         )
                 }
                 .buttonStyle(.plain)
@@ -80,6 +84,38 @@ struct TimerPanel: View {
                         .environmentObject(state)
                 }
                 .help("Adjust timer durations")
+
+                Button(action: { showingCalendarSettings.toggle() }) {
+                    Image(systemName: "calendar.badge.clock")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(HoduPalette.outline)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(HoduPalette.controlFill)
+                        )
+                }
+                .buttonStyle(.plain)
+                .popover(isPresented: $showingCalendarSettings, arrowEdge: .bottom) {
+                    CalendarSettingsPopover()
+                        .environmentObject(state)
+                }
+                .help("Calendar integrations")
+
+                Button(action: { state.settings.nightMode.toggle() }) {
+                    Image(systemName: state.settings.nightMode ? "sun.max.fill" : "moon.stars.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(state.settings.nightMode ? HoduPalette.moonGlow : HoduPalette.outline)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(HoduPalette.controlFill)
+                        )
+                }
+                .buttonStyle(.plain)
+                .help(state.settings.nightMode ? "Switch to daytime" : "Switch to night mode")
             }
 
             // Timer ring — sizes itself to the available space so the
@@ -149,7 +185,7 @@ struct TimerPanel: View {
                         .padding(.vertical, 10)
                         .background(
                             RoundedRectangle(cornerRadius: 10)
-                                .fill(Color.white.opacity(0.85))
+                                .fill(HoduPalette.selectedControlFill)
                         )
                         .foregroundStyle(HoduPalette.outline)
                 }
@@ -186,7 +222,7 @@ struct TimerPanel: View {
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.6)))
+                .background(RoundedRectangle(cornerRadius: 8).fill(HoduPalette.controlFill))
             }
 
             Spacer(minLength: 0)
@@ -194,10 +230,10 @@ struct TimerPanel: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 18)
-                .fill(Color.white.opacity(0.82))
+                .fill(HoduPalette.panelFill)
                 .overlay(
                     RoundedRectangle(cornerRadius: 18)
-                        .stroke(Color.white.opacity(0.9), lineWidth: 1.5)
+                        .stroke(HoduPalette.panelStroke, lineWidth: 1.5)
                 )
         )
     }
@@ -218,6 +254,9 @@ struct TaskListPanel: View {
                 TaskListHeader()
                 QuickFindField()
                 TaskComposer()
+                if state.selectedTaskList == .today {
+                    CalendarAgendaStrip()
+                }
 
                 if isEmptyState {
                     EmptyTaskState()
@@ -250,10 +289,10 @@ struct TaskListPanel: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 18)
-                .fill(Color.white.opacity(0.82))
+                .fill(HoduPalette.panelFill)
                 .overlay(
                     RoundedRectangle(cornerRadius: 18)
-                        .stroke(Color.white.opacity(0.9), lineWidth: 1.5)
+                        .stroke(HoduPalette.panelStroke, lineWidth: 1.5)
                 )
         )
         .onExitCommand { state.clearSelection() }
@@ -363,7 +402,7 @@ struct SidebarButton: View {
             .padding(.vertical, 6)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(isSelected ? Color.white.opacity(0.88) : Color.clear)
+                    .fill(isSelected ? HoduPalette.selectedControlFill : Color.clear)
             )
         }
         .buttonStyle(.plain)
@@ -413,7 +452,7 @@ struct QuickFindField: View {
         }
         .padding(.horizontal, 9)
         .padding(.vertical, 7)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.72)))
+        .background(RoundedRectangle(cornerRadius: 8).fill(HoduPalette.controlFill))
     }
 }
 
@@ -426,7 +465,7 @@ struct TaskComposer: View {
                 .textFieldStyle(.plain)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
-                .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.9)))
+                .background(RoundedRectangle(cornerRadius: 8).fill(HoduPalette.selectedControlFill))
                 .foregroundStyle(HoduPalette.outline)
                 .onSubmit { state.addTask() }
                 .disabled(state.selectedTaskList == .logbook)
@@ -486,6 +525,97 @@ struct EmptyTaskState: View {
         case .area: return "No tasks in this area."
         case .project: return "No tasks in this project."
         }
+    }
+}
+
+struct CalendarAgendaStrip: View {
+    @EnvironmentObject var state: AppState
+
+    var body: some View {
+        if state.calendarConnectionsEnabled {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: "calendar")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(HoduPalette.orange)
+                    Text("Calendar")
+                        .font(.system(size: 10, weight: .heavy, design: .rounded))
+                        .foregroundStyle(HoduPalette.outline.opacity(0.7))
+                    Spacer()
+                    Text(state.calendarStatus.message)
+                        .font(.system(size: 9, weight: .semibold, design: .rounded))
+                        .foregroundStyle(HoduPalette.outline.opacity(0.5))
+                    Button(action: { state.refreshCalendarEvents() }) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(HoduPalette.outline.opacity(0.55))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Refresh calendars")
+                }
+
+                if state.calendarEvents.isEmpty {
+                    Text("No events to plan around today.")
+                        .font(.system(size: 10, weight: .medium, design: .rounded))
+                        .foregroundStyle(HoduPalette.outline.opacity(0.55))
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 7)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(HoduPalette.controlFill))
+                } else {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(state.calendarEvents.prefix(8)) { event in
+                                CalendarEventChip(event: event)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct CalendarEventChip: View {
+    @EnvironmentObject var state: AppState
+    let event: CalendarEventItem
+
+    var body: some View {
+        HStack(spacing: 7) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(event.timeRangeText)
+                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .foregroundStyle(HoduPalette.orange)
+                Text(event.title)
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .foregroundStyle(HoduPalette.outline)
+                    .lineLimit(1)
+                if !event.location.isEmpty {
+                    Text(event.location)
+                        .font(.system(size: 9, weight: .medium, design: .rounded))
+                        .foregroundStyle(HoduPalette.outline.opacity(0.48))
+                        .lineLimit(1)
+                }
+            }
+            .frame(width: 130, alignment: .leading)
+
+            Button(action: { state.addTask(from: event) }) {
+                Image(systemName: "plus")
+                    .font(.system(size: 10, weight: .bold))
+                    .frame(width: 22, height: 22)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(HoduPalette.orange))
+                    .foregroundStyle(.white)
+            }
+            .buttonStyle(.plain)
+            .help("Add event as task")
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+        .background(RoundedRectangle(cornerRadius: 8).fill(HoduPalette.controlFill))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(HoduPalette.orange.opacity(event.source == .google ? 0.45 : 0.25), lineWidth: 1)
+        )
     }
 }
 
@@ -559,7 +689,7 @@ struct SelectionFooter: View {
                     .foregroundStyle(HoduPalette.outline.opacity(0.7))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.7)))
+                    .background(RoundedRectangle(cornerRadius: 6).fill(HoduPalette.controlFill))
             }
             .buttonStyle(.plain)
             // Cancel-action gives Esc a real binding regardless of which
@@ -734,7 +864,7 @@ struct TaskRow: View {
                 RoundedRectangle(cornerRadius: 10)
                     .fill(isSelected
                           ? HoduPalette.selectionFill(for: state.selectionLoadLevel)
-                          : Color.white.opacity(0.7))
+                          : HoduPalette.controlFill)
                 if isActive {
                     RoundedRectangle(cornerRadius: 10)
                         .fill(HoduPalette.orange.opacity(0.35))
@@ -941,6 +1071,113 @@ struct TaskDropDelegate: DropDelegate {
     func dropExited(info: DropInfo) {}
 }
 
+// MARK: - Calendar settings
+
+struct CalendarSettingsPopover: View {
+    @EnvironmentObject var state: AppState
+    @State private var googleName: String = ""
+    @State private var googleURL: String = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Calendar integrations")
+                    .font(.system(size: 13, weight: .heavy, design: .rounded))
+                    .foregroundStyle(HoduPalette.adaptiveText)
+                Spacer()
+                Button(action: { state.refreshCalendarEvents() }) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(HoduPalette.orange)
+                }
+                .buttonStyle(.plain)
+                .help("Refresh calendars")
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Label("Apple Calendar", systemImage: "apple.logo")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .foregroundStyle(HoduPalette.adaptiveText)
+                    Spacer()
+                    Text(state.settings.appleCalendarEnabled ? "Connected" : "Off")
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .foregroundStyle(state.settings.appleCalendarEnabled ? HoduPalette.orange : .secondary)
+                }
+
+                Button(state.settings.appleCalendarEnabled ? "Disconnect Apple Calendar" : "Connect Apple Calendar") {
+                    if state.settings.appleCalendarEnabled {
+                        state.disconnectAppleCalendar()
+                    } else {
+                        state.connectAppleCalendar()
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.08)))
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Label("Google Calendar", systemImage: "g.circle")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .foregroundStyle(HoduPalette.adaptiveText)
+                    Spacer()
+                    Text(state.settings.googleCalendarEnabled ? "Connected" : "Read-only iCal")
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .foregroundStyle(state.settings.googleCalendarEnabled ? HoduPalette.orange : .secondary)
+                }
+
+                DetailField(label: "Name", text: $googleName, placeholder: "Google Calendar")
+                DetailField(label: "Secret iCal URL", text: $googleURL, placeholder: "https://calendar.google.com/calendar/ical/...")
+
+                Text("Paste Google Calendar's Secret address in iCal format. It stays local in app settings.")
+                    .font(.system(size: 9, weight: .medium, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack {
+                    Button("Save Google Calendar") {
+                        state.saveGoogleCalendar(name: googleName, urlString: googleURL)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(URL(string: googleURL.trimmingCharacters(in: .whitespacesAndNewlines)) == nil)
+
+                    if state.settings.googleCalendarEnabled {
+                        Button("Disconnect") {
+                            state.disconnectGoogleCalendar()
+                            googleURL = ""
+                        }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .foregroundStyle(HoduPalette.orange)
+                    }
+                }
+            }
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.08)))
+
+            Text(state.calendarStatus.message)
+                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                .foregroundStyle(statusColor)
+        }
+        .padding(14)
+        .frame(width: 340)
+        .onAppear {
+            googleName = state.settings.googleCalendarName
+            googleURL = state.settings.googleCalendarURL
+        }
+        .preferredColorScheme(state.settings.nightMode ? .dark : .light)
+    }
+
+    private var statusColor: Color {
+        if case .error = state.calendarStatus { return .red }
+        return .secondary
+    }
+}
+
 // MARK: - Duration settings
 
 struct DurationSettings: View {
@@ -1000,7 +1237,10 @@ struct DurationSettings: View {
             }
 
             Button("Reset to defaults") {
-                state.settings = Settings()
+                state.settings.workMinutes = 25
+                state.settings.shortBreakMinutes = 5
+                state.settings.longBreakMinutes = 15
+                state.settings.cyclesUntilLongBreak = 4
             }
             .buttonStyle(.plain)
             .font(.system(size: 10, weight: .semibold, design: .rounded))
@@ -1159,13 +1399,14 @@ struct FloatingWidget: View {
         .frame(width: 240, height: 120)
         .background(
             RoundedRectangle(cornerRadius: 14)
-                .fill(Color(red: 1.0, green: 0.95, blue: 0.88))
+                .fill(HoduPalette.panelFill)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 14)
-                .stroke(HoduPalette.orange, lineWidth: 2)
+                .stroke(state.settings.nightMode ? HoduPalette.panelStroke : HoduPalette.orange, lineWidth: 2)
         )
         .shadow(color: .black.opacity(0.25), radius: 8, y: 2)
+        .preferredColorScheme(state.settings.nightMode ? .dark : .light)
     }
 }
 
@@ -1280,6 +1521,7 @@ struct MenuBarWidget: View {
         }
         .padding(14)
         .frame(width: 260)
+        .preferredColorScheme(state.settings.nightMode ? .dark : .light)
     }
 }
 
@@ -1437,14 +1679,14 @@ struct InteractiveCat: View {
 
                 // The cat
                 ZStack {
-                    PixelSpriteView(sprite: Sprites.hodu, pixelSize: 4)
+                    PixelSpriteView(sprite: state.settings.nightMode ? Sprites.hoduSleeping : Sprites.hodu, pixelSize: 4)
                         .scaleEffect(state.isPurring ? 1.06 : 1.0)
                         .rotationEffect(.degrees(wiggle))
                         .animation(.spring(response: 0.25, dampingFraction: 0.4), value: wiggle)
                         .animation(.spring(response: 0.3, dampingFraction: 0.5), value: state.isPurring)
 
                     // Blink overlay (covers eyes briefly)
-                    if blinking {
+                    if blinking && !state.settings.nightMode {
                         Rectangle()
                             .fill(HoduPalette.orange)
                             .frame(width: 40, height: 3)
@@ -1458,6 +1700,11 @@ struct InteractiveCat: View {
                             .foregroundStyle(HoduPalette.orange)
                             .offset(x: 28, y: -28)
                             .transition(.opacity)
+                    } else if state.settings.nightMode {
+                        Text("Zzz")
+                            .font(.system(size: 12, weight: .heavy, design: .rounded))
+                            .foregroundStyle(HoduPalette.moonGlow)
+                            .offset(x: 30, y: -30)
                     }
                 }
 

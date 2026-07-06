@@ -48,6 +48,13 @@ tools (`xcode-select --install`). No other dependencies.
   - **Double-click** (or click the ✎ pencil) to edit a task title inline.
   - Checking a task off moves it into **Logbook** history.
   - Every completed focus session adds a 🍊 next to the active task.
+- 📅 **Calendar integrations**
+  - Connect **Apple Calendar** with native macOS calendar permission.
+  - Connect **Google Calendar** with Google's read-only Secret iCal URL.
+  - Today's calendar events appear above Today's tasks, with a one-click
+    action to turn an event into a focus task.
+  - Full Google OAuth sync requires a Google Cloud OAuth client and consent
+    screen, so this app uses iCal import by default.
 - 🪟 **Floating mini-widget** — press **⇧⌘M** (or click "Minimize to
   floating widget") to collapse into a small always-on-top widget at the top
   of the screen. The widget **auto-hides** when the main window is focused
@@ -62,6 +69,9 @@ tools (`xcode-select --install`). No other dependencies.
 - 🏖️ **Pixel-art beach scene** — hand-drawn Hodu, a palm tree, sun,
   clouds, seagulls, crab, scallop shell, and starfish. Rendered through
   SwiftUI `Canvas`, so it stays crisp at any window size.
+- 🌙 **Night mode** — toggle the moon/sun button in the timer controls to
+  switch to a darker nighttime beach with moonlight, stars, dimmed panels,
+  and sleeping Hodu.
 - 🔔 Plays the system "Glass" chime when a session ends.
 
 ## Keyboard shortcuts
@@ -78,7 +88,7 @@ Standard macOS window shortcuts (⌘W, ⌘M, etc.) work too.
 ```
 ~/Library/Application Support/HoduPomodoro/
   tasks.json       tasks, schedule buckets, areas/projects, notes, deadlines
-  settings.json    durations + cycles
+  settings.json    durations + cycles + appearance + calendar connections
   history.json     last 10 completed tasks
 ```
 

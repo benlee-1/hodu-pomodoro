@@ -16,7 +16,7 @@ enum HoduPalette {
     static let orange      = Color(red: 1.00, green: 0.62, blue: 0.32)
     static let darkOrange  = Color(red: 0.82, green: 0.42, blue: 0.20)
     static let white       = Color(red: 1.00, green: 0.98, blue: 0.94)
-    static let outline     = Color(red: 0.20, green: 0.13, blue: 0.10)
+    static let spriteOutline = Color(red: 0.20, green: 0.13, blue: 0.10)
     static let pink        = Color(red: 1.00, green: 0.68, blue: 0.72)
     static let eyeWhite    = Color(red: 1.00, green: 0.98, blue: 0.85)
     static let eyePupil    = Color(red: 0.10, green: 0.08, blue: 0.06)
@@ -33,6 +33,8 @@ enum HoduPalette {
     static let shellPink  = Color(red: 1.00, green: 0.82, blue: 0.80)
     static let shellDeep  = Color(red: 0.92, green: 0.60, blue: 0.64)
     static let starYellow = Color(red: 1.00, green: 0.88, blue: 0.46)
+    static let moonGlow   = Color(red: 0.95, green: 0.89, blue: 0.62)
+    static let moonShade  = Color(red: 0.64, green: 0.68, blue: 0.84)
 
     // Selection chrome — tints scale with the number of selected tasks so the
     // user can feel "too many" at a glance. See `SelectionLoadLevel`.
@@ -60,6 +62,46 @@ enum HoduPalette {
         case .overload: return selectionOverloadBorder
         }
     }
+
+    static let outline = Color(nsColor: NSColor(name: "HoduOutline") { appearance in
+        let isDark = appearance.bestMatch(from: [.darkAqua, .vibrantDark, .aqua, .vibrantLight])
+            .map { $0 == .darkAqua || $0 == .vibrantDark } ?? false
+        return isDark
+            ? NSColor(red: 1.00, green: 0.94, blue: 0.86, alpha: 1.0)
+            : NSColor(red: 0.20, green: 0.13, blue: 0.10, alpha: 1.0)
+    })
+
+    static let panelFill = Color(nsColor: NSColor(name: "HoduPanelFill") { appearance in
+        let isDark = appearance.bestMatch(from: [.darkAqua, .vibrantDark, .aqua, .vibrantLight])
+            .map { $0 == .darkAqua || $0 == .vibrantDark } ?? false
+        return isDark
+            ? NSColor(red: 0.09, green: 0.12, blue: 0.20, alpha: 0.88)
+            : NSColor(red: 1.00, green: 1.00, blue: 1.00, alpha: 0.82)
+    })
+
+    static let panelStroke = Color(nsColor: NSColor(name: "HoduPanelStroke") { appearance in
+        let isDark = appearance.bestMatch(from: [.darkAqua, .vibrantDark, .aqua, .vibrantLight])
+            .map { $0 == .darkAqua || $0 == .vibrantDark } ?? false
+        return isDark
+            ? NSColor(red: 0.33, green: 0.39, blue: 0.56, alpha: 0.85)
+            : NSColor(red: 1.00, green: 1.00, blue: 1.00, alpha: 0.90)
+    })
+
+    static let controlFill = Color(nsColor: NSColor(name: "HoduControlFill") { appearance in
+        let isDark = appearance.bestMatch(from: [.darkAqua, .vibrantDark, .aqua, .vibrantLight])
+            .map { $0 == .darkAqua || $0 == .vibrantDark } ?? false
+        return isDark
+            ? NSColor(red: 0.16, green: 0.20, blue: 0.31, alpha: 0.90)
+            : NSColor(red: 1.00, green: 1.00, blue: 1.00, alpha: 0.72)
+    })
+
+    static let selectedControlFill = Color(nsColor: NSColor(name: "HoduSelectedControlFill") { appearance in
+        let isDark = appearance.bestMatch(from: [.darkAqua, .vibrantDark, .aqua, .vibrantLight])
+            .map { $0 == .darkAqua || $0 == .vibrantDark } ?? false
+        return isDark
+            ? NSColor(red: 0.25, green: 0.29, blue: 0.42, alpha: 0.95)
+            : NSColor(red: 1.00, green: 1.00, blue: 1.00, alpha: 0.88)
+    })
 
     // Adaptive text color for surfaces that follow the system appearance
     // (menu-bar popover, its sub-popovers, the timer-settings popover).
@@ -99,13 +141,42 @@ enum Sprites {
             "..BBBB.BB.BB.BBB"
         ],
         palette: [
-            "B": HoduPalette.outline,
+            "B": HoduPalette.spriteOutline,
             "O": HoduPalette.orange,
             "o": HoduPalette.darkOrange,
             "W": HoduPalette.white,
             "P": HoduPalette.pink,
             "E": HoduPalette.eyePupil,
             "Y": HoduPalette.eyeWhite
+        ]
+    )
+
+    // Sleeping Hodu — same sitting silhouette with closed eyes and a quiet face.
+    static let hoduSleeping = PixelSprite(
+        rows: [
+            "...BB......BB...",
+            "..BoOB....BOoB..",
+            ".BoPOOB..BOOPoB.",
+            "BOOOOOOBBOOOOOOB",
+            "BOOOOOOOOOOOOOOB",
+            "BOoOBBOOOOBBoOOB",
+            "BOOOOOOPPOOOOOOB",
+            "BOOOOWWWWWWOOOOB",
+            ".BOOOWWWWWWWOOB.",
+            ".BOOWWWWWWWWOOB.",
+            "..BOWWWWWWWWWOB.",
+            "..BOWWWWWWWWWOB.",
+            "..BOWWWWWWWWWOB.",
+            "..BOWWBWWBWWBWOB",
+            "..BOWWBWWBWWBWOB",
+            "..BBBB.BB.BB.BBB"
+        ],
+        palette: [
+            "B": HoduPalette.spriteOutline,
+            "O": HoduPalette.orange,
+            "o": HoduPalette.darkOrange,
+            "W": HoduPalette.white,
+            "P": HoduPalette.pink
         ]
     )
 
@@ -172,7 +243,7 @@ enum Sprites {
         palette: [
             "R": HoduPalette.crabRed,
             "C": HoduPalette.crabDark,
-            "D": HoduPalette.outline
+            "D": HoduPalette.spriteOutline
         ]
     )
 
@@ -222,6 +293,48 @@ enum Sprites {
         ]
     )
 
+    static let nightCloud = PixelSprite(
+        rows: [
+            "...CCCC...",
+            ".CCccccCC.",
+            "CcccccccCC",
+            ".CCCCCCCC."
+        ],
+        palette: [
+            "C": Color(red: 0.40, green: 0.45, blue: 0.62),
+            "c": Color(red: 0.29, green: 0.33, blue: 0.48)
+        ]
+    )
+
+    static let moon = PixelSprite(
+        rows: [
+            "...MMMM...",
+            "..MMMMMM..",
+            ".MMMMMSS.",
+            ".MMMMSSS.",
+            ".MMMMMSS.",
+            "..MMMMMM..",
+            "...MMMM..."
+        ],
+        palette: [
+            "M": HoduPalette.moonGlow,
+            "S": HoduPalette.moonShade
+        ]
+    )
+
+    static let star = PixelSprite(
+        rows: [
+            "..S..",
+            ".SSS.",
+            "SSSSS",
+            ".SSS.",
+            "..S.."
+        ],
+        palette: [
+            "S": HoduPalette.moonGlow
+        ]
+    )
+
     // Tiny seagull silhouette (two gull wings). 9x3.
     static let seagull = PixelSprite(
         rows: [
@@ -230,7 +343,7 @@ enum Sprites {
             "..GG.GG.."
         ],
         palette: [
-            "G": HoduPalette.outline
+            "G": HoduPalette.spriteOutline
         ]
     )
 }
