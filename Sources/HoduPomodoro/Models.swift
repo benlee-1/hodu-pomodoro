@@ -228,6 +228,7 @@ struct Settings: Codable {
     /// Global UI zoom factor for normal windows. Fullscreen always renders at
     /// native scale to avoid magnifying the beach/canvas output.
     var uiScale: Double = 1.0
+    var panelSplitFraction: Double = 0.5
     var appleCalendarEnabled: Bool = false
     var googleCalendarEnabled: Bool = false
     var googleCalendarName: String = "Google Calendar"
@@ -236,12 +237,14 @@ struct Settings: Codable {
     static let minUIScale: Double = 0.8
     static let maxUIScale: Double = 2.0
     static let uiScaleStep: Double = 0.1
+    static let minPanelSplitFraction: Double = 0.28
+    static let maxPanelSplitFraction: Double = 0.72
 
     init() {}
 
     private enum CodingKeys: String, CodingKey {
         case workMinutes, shortBreakMinutes, longBreakMinutes, cyclesUntilLongBreak, overlayPinned, nightMode
-        case uiScale
+        case uiScale, panelSplitFraction
         case appleCalendarEnabled, googleCalendarEnabled, googleCalendarName, googleCalendarURL
     }
 
@@ -255,6 +258,11 @@ struct Settings: Codable {
         self.nightMode = try c.decodeIfPresent(Bool.self, forKey: .nightMode) ?? false
         let rawScale = try c.decodeIfPresent(Double.self, forKey: .uiScale) ?? 1.0
         self.uiScale = min(max(rawScale, Settings.minUIScale), Settings.maxUIScale)
+        let rawSplit = try c.decodeIfPresent(Double.self, forKey: .panelSplitFraction) ?? 0.5
+        self.panelSplitFraction = min(
+            max(rawSplit, Settings.minPanelSplitFraction),
+            Settings.maxPanelSplitFraction
+        )
         self.appleCalendarEnabled = try c.decodeIfPresent(Bool.self, forKey: .appleCalendarEnabled) ?? false
         self.googleCalendarEnabled = try c.decodeIfPresent(Bool.self, forKey: .googleCalendarEnabled) ?? false
         self.googleCalendarName = try c.decodeIfPresent(String.self, forKey: .googleCalendarName) ?? "Google Calendar"

@@ -39,8 +39,9 @@ final class AppState: ObservableObject {
     // Settings
     @Published var settings: Settings {
         didSet {
+            let oldDuration = oldValue.seconds(for: mode)
             saveSettings()
-            if !isRunning {
+            if !isRunning && settings.seconds(for: mode) != oldDuration {
                 remainingSeconds = settings.seconds(for: mode)
             }
         }
@@ -210,11 +211,14 @@ final class AppState: ObservableObject {
 
     func addTask(from event: CalendarEventItem) {
         var task = TodoItem(title: event.title)
-        task.bucket = .today
-        task.startDate = Calendar.current.startOfDay(for: event.startDate)
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let eventDay = cal.startOfDay(for: event.startDate)
+        task.bucket = eventDay <= today ? .today : .upcoming
+        task.startDate = eventDay
         task.notes = calendarTaskNotes(for: event)
         tasks.append(task)
-        selectedTaskList = .today
+        selectedTaskList = task.bucket == .today ? .today : .upcoming
         saveTasks()
     }
 
@@ -316,31 +320,38 @@ final class AppState: ObservableObject {
         }
 
         calendarStatus = .loading
-        let range = todayCalendarRange()
+        let range = calendarPlanningRange()
         let settingsSnapshot = settings
         Task { @MainActor in
             do {
                 let events = try await calendarService.fetchEvents(settings: settingsSnapshot, range: range)
                 calendarEvents = events
-                calendarStatus = .ready(events.isEmpty ? "No calendar events today" : "\(events.count) calendar events today")
+                calendarStatus = .ready(events.isEmpty ? "No calendar events this week" : "\(events.count) calendar events this week")
             } catch {
                 calendarStatus = .error("Calendar refresh failed")
             }
         }
     }
 
-    private func todayCalendarRange() -> DateInterval {
+    private func calendarPlanningRange() -> DateInterval {
         let cal = Calendar.current
         let start = cal.startOfDay(for: Date())
-        let end = cal.date(byAdding: .day, value: 1, to: start) ?? Date().addingTimeInterval(24 * 60 * 60)
+        let end = cal.date(byAdding: .day, value: 7, to: start) ?? Date().addingTimeInterval(7 * 24 * 60 * 60)
         return DateInterval(start: start, end: end)
     }
 
     private func calendarTaskNotes(for event: CalendarEventItem) -> String {
-        var lines = ["Imported from \(event.source.rawValue) Calendar", event.timeRangeText]
+        let dateText = Self.calendarNoteDateFormatter.string(from: event.startDate)
+        var lines = ["Imported from \(event.source.rawValue) Calendar", "\(dateText) \(event.timeRangeText)"]
         if !event.location.isEmpty { lines.append(event.location) }
         return lines.joined(separator: "\n")
     }
+
+    private static let calendarNoteDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "EEE, MMM d"
+        return f
+    }()
 
     // MARK: - Multi-selection
 

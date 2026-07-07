@@ -15,12 +15,7 @@ struct ContentView: View {
                 // Panels float in the top portion; bottom stays clear so
                 // Hodu, the palm, crab, and shells stay visible.
                 VStack(spacing: 0) {
-                    HStack(alignment: .top, spacing: 14) {
-                        TimerPanel()
-                            .frame(maxWidth: .infinity)
-                        TaskListPanel()
-                            .frame(maxWidth: .infinity)
-                    }
+                    ResizableSplitPanels()
                     .padding(.horizontal, 16)
                     .padding(.top, 14)
                     .frame(maxHeight: max(260, geo.size.height * 0.68),
@@ -34,6 +29,112 @@ struct ContentView: View {
         .background(state.settings.nightMode
                     ? Color(red: 0.06, green: 0.08, blue: 0.18)
                     : Color(red: 0.53, green: 0.80, blue: 0.95))
+    }
+}
+
+// MARK: - Split layout
+
+struct ResizableSplitPanels: View {
+    @EnvironmentObject var state: AppState
+    @State private var dragStartFraction: Double?
+    @State private var liveSplitFraction: Double?
+
+    private let dividerWidth: CGFloat = 18
+    private let minTimerWidth: CGFloat = 280
+    private let minTasksWidth: CGFloat = 310
+
+    var body: some View {
+        GeometryReader { geo in
+            let layout = splitLayout(for: geo.size.width)
+
+            HStack(alignment: .top, spacing: 0) {
+                TimerPanel()
+                    .frame(width: layout.timerWidth)
+
+                SplitDivider()
+                    .frame(width: dividerWidth)
+                    .frame(maxHeight: .infinity)
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { value in
+                                if dragStartFraction == nil {
+                                    dragStartFraction = layout.fraction
+                                }
+                                guard let dragStartFraction else { return }
+                                let proposedWidth = CGFloat(dragStartFraction) * layout.availableWidth + value.translation.width
+                                let proposedFraction = proposedWidth / layout.availableWidth
+                                liveSplitFraction = clampedFraction(
+                                    Double(proposedFraction),
+                                    availableWidth: layout.availableWidth
+                                )
+                            }
+                            .onEnded { _ in
+                                if let liveSplitFraction {
+                                    state.settings.panelSplitFraction = liveSplitFraction
+                                }
+                                liveSplitFraction = nil
+                                dragStartFraction = nil
+                            }
+                    )
+                    .accessibilityLabel("Resize timer and task panels")
+                    .help("Drag to resize panels")
+
+                TaskListPanel()
+                    .frame(width: layout.tasksWidth)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+    }
+
+    private func splitLayout(for width: CGFloat) -> (availableWidth: CGFloat, fraction: Double, timerWidth: CGFloat, tasksWidth: CGFloat) {
+        let availableWidth = max(1, width - dividerWidth)
+        let fraction = clampedFraction(liveSplitFraction ?? state.settings.panelSplitFraction, availableWidth: availableWidth)
+        let timerWidth = floor(availableWidth * CGFloat(fraction))
+        let tasksWidth = availableWidth - timerWidth
+        return (availableWidth, fraction, timerWidth, tasksWidth)
+    }
+
+    private func clampedFraction(_ fraction: Double, availableWidth: CGFloat) -> Double {
+        let minimum = max(Settings.minPanelSplitFraction, Double(minTimerWidth / availableWidth))
+        let maximum = min(Settings.maxPanelSplitFraction, Double((availableWidth - minTasksWidth) / availableWidth))
+        guard minimum <= maximum else { return 0.5 }
+        return min(max(fraction, minimum), maximum)
+    }
+}
+
+struct SplitDivider: View {
+    @State private var isHovering = false
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 4)
+                .fill(HoduPalette.panelStroke.opacity(isHovering ? 0.8 : 0.45))
+                .frame(width: isHovering ? 5 : 3)
+
+            VStack(spacing: 3) {
+                ForEach(0..<3, id: \.self) { _ in
+                    Circle()
+                        .fill(HoduPalette.outline.opacity(isHovering ? 0.7 : 0.45))
+                        .frame(width: 3, height: 3)
+                }
+            }
+            .padding(.vertical, 8)
+            .padding(.horizontal, 5)
+            .background(
+                Capsule()
+                    .fill(HoduPalette.controlFill.opacity(isHovering ? 0.95 : 0.75))
+            )
+        }
+        .frame(maxHeight: .infinity)
+        .onHover { hovering in
+            isHovering = hovering
+            if hovering {
+                NSCursor.resizeLeftRight.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
     }
 }
 
@@ -52,10 +153,18 @@ struct TimerPanel: View {
                     Button {
                         state.switchMode(mode)
                     } label: {
-                        Text("\(mode.emoji) \(mode.label)")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        HStack(spacing: 4) {
+                            Text(mode.emoji)
+                                .fixedSize()
+                            Text(mode.label)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                                .frame(minWidth: 0, alignment: .leading)
+                        }
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
+                            .frame(minWidth: 0)
                             .background(
                                 RoundedRectangle(cornerRadius: 8)
                                     .fill(state.mode == mode
@@ -530,6 +639,7 @@ struct EmptyTaskState: View {
 
 struct CalendarAgendaStrip: View {
     @EnvironmentObject var state: AppState
+    private let calendar = Calendar.current
 
     var body: some View {
         if state.calendarConnectionsEnabled {
@@ -538,7 +648,7 @@ struct CalendarAgendaStrip: View {
                     Image(systemName: "calendar")
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(HoduPalette.orange)
-                    Text("Calendar")
+                    Text("This Week")
                         .font(.system(size: 10, weight: .heavy, design: .rounded))
                         .foregroundStyle(HoduPalette.outline.opacity(0.7))
                     Spacer()
@@ -555,7 +665,7 @@ struct CalendarAgendaStrip: View {
                 }
 
                 if state.calendarEvents.isEmpty {
-                    Text("No events to plan around today.")
+                    Text("No events to plan around this week.")
                         .font(.system(size: 10, weight: .medium, design: .rounded))
                         .foregroundStyle(HoduPalette.outline.opacity(0.55))
                         .padding(.horizontal, 9)
@@ -564,9 +674,9 @@ struct CalendarAgendaStrip: View {
                         .background(RoundedRectangle(cornerRadius: 8).fill(HoduPalette.controlFill))
                 } else {
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
-                            ForEach(state.calendarEvents.prefix(8)) { event in
-                                CalendarEventChip(event: event)
+                        HStack(alignment: .top, spacing: 7) {
+                            ForEach(weekDays, id: \.self) { day in
+                                CalendarDayColumn(day: day, events: events(on: day))
                             }
                         }
                     }
@@ -574,6 +684,82 @@ struct CalendarAgendaStrip: View {
             }
         }
     }
+
+    private var weekDays: [Date] {
+        let start = calendar.startOfDay(for: Date())
+        return (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: start) }
+    }
+
+    private func events(on day: Date) -> [CalendarEventItem] {
+        state.calendarEvents.filter { calendar.isDate($0.startDate, inSameDayAs: day) }
+    }
+}
+
+struct CalendarDayColumn: View {
+    let day: Date
+    let events: [CalendarEventItem]
+
+    private var isToday: Bool {
+        Calendar.current.isDateInToday(day)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 4) {
+                Text(isToday ? "Today" : Self.weekdayFormatter.string(from: day))
+                    .font(.system(size: 10, weight: .heavy, design: .rounded))
+                    .foregroundStyle(isToday ? HoduPalette.orange : HoduPalette.outline.opacity(0.7))
+                Text(Self.dayFormatter.string(from: day))
+                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .foregroundStyle(HoduPalette.outline.opacity(0.45))
+                Spacer(minLength: 0)
+                if !events.isEmpty {
+                    Text("\(events.count)")
+                        .font(.system(size: 9, weight: .heavy, design: .rounded))
+                        .foregroundStyle(HoduPalette.outline.opacity(0.45))
+                }
+            }
+
+            if events.isEmpty {
+                Text("Clear")
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .foregroundStyle(HoduPalette.outline.opacity(0.45))
+                    .frame(maxWidth: .infinity, minHeight: 42, alignment: .center)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(HoduPalette.controlFill.opacity(0.65)))
+            } else {
+                VStack(spacing: 5) {
+                    ForEach(events.prefix(3)) { event in
+                        CalendarEventChip(event: event)
+                    }
+                    if events.count > 3 {
+                        Text("+ \(events.count - 3) more")
+                            .font(.system(size: 9, weight: .bold, design: .rounded))
+                            .foregroundStyle(HoduPalette.outline.opacity(0.5))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+        }
+        .padding(8)
+        .frame(width: 158, alignment: .topLeading)
+        .background(RoundedRectangle(cornerRadius: 10).fill(HoduPalette.controlFill.opacity(0.55)))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(isToday ? HoduPalette.orange.opacity(0.35) : HoduPalette.panelStroke.opacity(0.25), lineWidth: 1)
+        )
+    }
+
+    private static let weekdayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "EEE"
+        return f
+    }()
+
+    private static let dayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "M/d"
+        return f
+    }()
 }
 
 struct CalendarEventChip: View {
@@ -581,7 +767,7 @@ struct CalendarEventChip: View {
     let event: CalendarEventItem
 
     var body: some View {
-        HStack(spacing: 7) {
+        HStack(alignment: .top, spacing: 7) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(event.timeRangeText)
                     .font(.system(size: 9, weight: .bold, design: .rounded))
@@ -597,19 +783,19 @@ struct CalendarEventChip: View {
                         .lineLimit(1)
                 }
             }
-            .frame(width: 130, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             Button(action: { state.addTask(from: event) }) {
                 Image(systemName: "plus")
                     .font(.system(size: 10, weight: .bold))
-                    .frame(width: 22, height: 22)
+                    .frame(width: 20, height: 20)
                     .background(RoundedRectangle(cornerRadius: 6).fill(HoduPalette.orange))
                     .foregroundStyle(.white)
             }
             .buttonStyle(.plain)
             .help("Add event as task")
         }
-        .padding(.horizontal, 9)
+        .padding(.horizontal, 8)
         .padding(.vertical, 7)
         .background(RoundedRectangle(cornerRadius: 8).fill(HoduPalette.controlFill))
         .overlay(
